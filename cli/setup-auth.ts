@@ -16,10 +16,7 @@ import {
   generatePKCE,
   type OAuthConfig,
 } from "../integrations/oauth-client";
-import {
-  createTokenStorage,
-  toStoredTokens,
-} from "../integrations/token-storage";
+import { createTokenStorage, toStoredTokens } from "../integrations/token-storage";
 
 /**
  * Reads input from stdin
@@ -54,13 +51,9 @@ const setupJiraAuth = async (): Promise<void> => {
     console.log("2. Create a new OAuth 2.0 app");
     console.log("3. Set redirect URI to: http://localhost:3000/callback");
     console.log("4. Copy the Client ID");
-    console.log(
-      "\nAlternatively, set JIRA_OAUTH_CLIENT_ID in your environment."
-    );
+    console.log("\nAlternatively, set JIRA_OAUTH_CLIENT_ID in your environment.");
 
-    clientId = await prompt(
-      "\nEnter Jira OAuth Client ID (or press Enter to skip): "
-    );
+    clientId = await prompt("\nEnter Jira OAuth Client ID (or press Enter to skip): ");
     if (!clientId) {
       console.log("Skipping Jira OAuth setup.");
       return;
@@ -127,20 +120,14 @@ const setupBitbucketAuth = async (): Promise<void> => {
   // Get OAuth client ID from environment or prompt
   let clientId = process.env.BITBUCKET_OAUTH_CLIENT_ID;
   if (!clientId) {
-    console.log(
-      "\nTo set up Bitbucket OAuth, you need to create an OAuth consumer:"
-    );
+    console.log("\nTo set up Bitbucket OAuth, you need to create an OAuth consumer:");
     console.log("1. Go to your Bitbucket workspace settings");
     console.log("2. Navigate to Access Management → OAuth → Add consumer");
     console.log("3. Set callback URL to: http://localhost:3001/callback");
     console.log("4. Copy the Key (Client ID)");
-    console.log(
-      "\nAlternatively, set BITBUCKET_OAUTH_CLIENT_ID in your environment."
-    );
+    console.log("\nAlternatively, set BITBUCKET_OAUTH_CLIENT_ID in your environment.");
 
-    clientId = await prompt(
-      "\nEnter Bitbucket OAuth Client ID (or press Enter to skip): "
-    );
+    clientId = await prompt("\nEnter Bitbucket OAuth Client ID (or press Enter to skip): ");
     if (!clientId) {
       console.log("Skipping Bitbucket OAuth setup.");
       return;
@@ -204,9 +191,7 @@ const setupBitbucketAuth = async (): Promise<void> => {
 const setupZephyrToken = async (): Promise<void> => {
   console.log("\n=== Setting up Zephyr API Token ===");
   console.log("\nZephyr tokens must be generated manually from the Jira UI:");
-  console.log(
-    "1. Log in to your Jira instance where Zephyr Scale is installed"
-  );
+  console.log("1. Log in to your Jira instance where Zephyr Scale is installed");
   console.log("2. Click on your profile picture at the bottom left");
   console.log("3. Choose 'Zephyr API keys' from the menu");
   console.log("4. Click 'Generate a Key'");
@@ -216,9 +201,7 @@ const setupZephyrToken = async (): Promise<void> => {
     "https://support.smartbear.com/zephyr/docs/en/rest-api/api-access-tokens-management.html"
   );
 
-  const token = await prompt(
-    "\nEnter your Zephyr API token (or press Enter to skip): "
-  );
+  const token = await prompt("\nEnter your Zephyr API token (or press Enter to skip): ");
   if (!token) {
     console.log("Skipping Zephyr token setup.");
     return;
@@ -256,19 +239,13 @@ const main = async (): Promise<void> => {
 
     // Setup Bitbucket
     const setupBitbucket = await prompt("\nSet up Bitbucket OAuth? (y/n): ");
-    if (
-      setupBitbucket.toLowerCase() === "y" ||
-      setupBitbucket.toLowerCase() === "yes"
-    ) {
+    if (setupBitbucket.toLowerCase() === "y" || setupBitbucket.toLowerCase() === "yes") {
       await setupBitbucketAuth();
     }
 
     // Setup Zephyr
     const setupZephyr = await prompt("\nSet up Zephyr API token? (y/n): ");
-    if (
-      setupZephyr.toLowerCase() === "y" ||
-      setupZephyr.toLowerCase() === "yes"
-    ) {
+    if (setupZephyr.toLowerCase() === "y" || setupZephyr.toLowerCase() === "yes") {
       await setupZephyrToken();
     }
 

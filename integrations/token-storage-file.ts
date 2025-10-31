@@ -5,12 +5,7 @@
  * Uses simple encryption for basic security.
  */
 
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-} from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";

@@ -85,10 +85,7 @@ export const toStoredTokens = (
 /**
  * Checks if tokens are expired or will expire soon
  */
-export const isTokenExpired = (
-  tokens: StoredTokens,
-  bufferSeconds = 60
-): boolean => {
+export const isTokenExpired = (tokens: StoredTokens, bufferSeconds = 60): boolean => {
   if (!tokens.expiresAt) {
     return false; // No expiration info, assume valid
   }

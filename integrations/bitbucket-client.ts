@@ -13,18 +13,10 @@ export interface BitbucketConfig {
 }
 
 export interface BitbucketClient {
-  getPullRequest(
-    workspace: string,
-    repoSlug: string,
-    prId: string
-  ): Promise<PullRequest>;
+  getPullRequest(workspace: string, repoSlug: string, prId: string): Promise<PullRequest>;
   getPRDiff(workspace: string, repoSlug: string, prId: string): Promise<string>;
   extractJiraTickets(pullRequest: PullRequest): string[];
-  getChangedFiles(
-    workspace: string,
-    repoSlug: string,
-    prId: string
-  ): Promise<ChangedFile[]>;
+  getChangedFiles(workspace: string, repoSlug: string, prId: string): Promise<ChangedFile[]>;
   getSourceBranch(pullRequest: PullRequest): string;
 }
 
@@ -108,9 +100,7 @@ export const initialize = (config: BitbucketConfig): BitbucketClient => {
       return `Basic ${credentials}`;
     } else if (email) {
       // API token with separate email - use Basic Auth with email:token
-      const credentials = Buffer.from(`${email}:${apiToken}`).toString(
-        "base64"
-      );
+      const credentials = Buffer.from(`${email}:${apiToken}`).toString("base64");
       return `Basic ${credentials}`;
     } else {
       // Assume it's an access token - use Bearer auth
@@ -127,10 +117,7 @@ export const initialize = (config: BitbucketConfig): BitbucketClient => {
     },
   };
 
-  const makeRequest = async <T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> => {
+  const makeRequest = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
     const url = `${clientConfig.baseUrl}${endpoint}`;
     const headers = new Headers(options.headers);
     headers.set("Authorization", await getAuthHeader());
@@ -168,11 +155,7 @@ export const initialize = (config: BitbucketConfig): BitbucketClient => {
   };
 
   return {
-    getPullRequest: async (
-      workspace: string,
-      repoSlug: string,
-      prId: string
-    ) => {
+    getPullRequest: async (workspace: string, repoSlug: string, prId: string) => {
       return makeRequest<PullRequest>(
         `/repositories/${workspace}/${repoSlug}/pullrequests/${prId}`
       );
@@ -208,11 +191,7 @@ export const initialize = (config: BitbucketConfig): BitbucketClient => {
 
       return Array.from(tickets);
     },
-    getChangedFiles: async (
-      workspace: string,
-      repoSlug: string,
-      prId: string
-    ) => {
+    getChangedFiles: async (workspace: string, repoSlug: string, prId: string) => {
       // Fetch diffstat from PR endpoint
       const pr = await makeRequest<
         PullRequest & {
@@ -278,11 +257,7 @@ export const initialize = (config: BitbucketConfig): BitbucketClient => {
               for (let j = i + 1; j < Math.min(i + 5, diffLines.length); j++) {
                 if (diffLines[j].startsWith("+++ b/")) {
                   const newPath = diffLines[j].substring(6).trim();
-                  if (
-                    newPath &&
-                    newPath !== "/dev/null" &&
-                    newPath !== "null"
-                  ) {
+                  if (newPath && newPath !== "/dev/null" && newPath !== "null") {
                     filePaths.set(newPath, "modified");
                     foundNewPath = true;
                   }
@@ -298,11 +273,7 @@ export const initialize = (config: BitbucketConfig): BitbucketClient => {
               for (let j = i + 1; j < Math.min(i + 5, diffLines.length); j++) {
                 if (diffLines[j].startsWith("+++ b/")) {
                   const newPath = diffLines[j].substring(6).trim();
-                  if (
-                    newPath &&
-                    newPath !== "/dev/null" &&
-                    newPath !== "null"
-                  ) {
+                  if (newPath && newPath !== "/dev/null" && newPath !== "null") {
                     filePaths.set(newPath, "added");
                   }
                   break;
@@ -319,11 +290,7 @@ export const initialize = (config: BitbucketConfig): BitbucketClient => {
                 for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
                   if (diffLines[j].startsWith("--- a/")) {
                     const oldPath = diffLines[j].substring(6).trim();
-                    if (
-                      oldPath &&
-                      oldPath !== "/dev/null" &&
-                      oldPath !== "null"
-                    ) {
+                    if (oldPath && oldPath !== "/dev/null" && oldPath !== "null") {
                       filePaths.set(path, "modified");
                       foundOldPath = true;
                     }

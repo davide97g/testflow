@@ -81,11 +81,7 @@ export const startCallbackServer = (
         clearTimeout(timeoutId);
 
         if (error) {
-          reject(
-            new Error(
-              `OAuth authorization failed: ${error} - ${errorDescription || ""}`
-            )
-          );
+          reject(new Error(`OAuth authorization failed: ${error} - ${errorDescription || ""}`));
         } else if (code) {
           resolve({
             code,

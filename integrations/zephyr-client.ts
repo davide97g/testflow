@@ -144,10 +144,7 @@ export const initialize = (config: ZephyrConfig): ZephyrClient => {
     },
   };
 
-  const makeRequest = async <T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> => {
+  const makeRequest = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
     const url = `${clientConfig.baseUrl}${endpoint}`;
     const headers = new Headers(options.headers);
     headers.set("Authorization", await getAuthHeader());
@@ -161,9 +158,7 @@ export const initialize = (config: ZephyrConfig): ZephyrClient => {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Unknown error");
-      throw new Error(
-        `Zephyr API error: ${response.status} ${response.statusText} - ${errorText}`
-      );
+      throw new Error(`Zephyr API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     return (await response.json()) as T;

@@ -4,10 +4,7 @@
  * Checks the status of stored OAuth tokens and API tokens.
  */
 
-import {
-  createTokenStorage,
-  isTokenExpired,
-} from "../integrations/token-storage";
+import { createTokenStorage, isTokenExpired } from "../integrations/token-storage";
 
 /**
  * Formats a timestamp as a human-readable date
@@ -59,9 +56,7 @@ const main = async (): Promise<void> => {
     await checkServiceTokens("bitbucket");
     await checkServiceTokens("zephyr");
 
-    console.log(
-      "\nTo refresh expired tokens or set up new ones, run: bun run setup-auth"
-    );
+    console.log("\nTo refresh expired tokens or set up new ones, run: bun run setup-auth");
   } catch (error) {
     console.error("Error checking tokens:", error);
     process.exit(1);

@@ -15,10 +15,7 @@ export interface JiraConfig {
 export interface JiraClient {
   getTicket(ticketKey: string): Promise<JiraTicket>;
   getLinkedTestCases(ticketKey: string): Promise<TestCaseReference[]>;
-  postTestResults(
-    ticketKey: string,
-    testResults: unknown
-  ): Promise<JiraAPIResponse>;
+  postTestResults(ticketKey: string, testResults: unknown): Promise<JiraAPIResponse>;
   updateTicket(ticketKey: string, summary: string): Promise<JiraAPIResponse>;
 }
 
@@ -74,10 +71,7 @@ interface CommentResponse {
  * @param apiToken - Jira API token
  * @returns Base64 encoded authorization header value
  */
-const createAuthHeader = (
-  email: string | undefined,
-  apiToken: string
-): string => {
+const createAuthHeader = (email: string | undefined, apiToken: string): string => {
   const credentials = email ? `${email}:${apiToken}` : `:${apiToken}`;
   return Buffer.from(credentials).toString("base64");
 };
@@ -150,10 +144,7 @@ export const initialize = (config: JiraConfig): JiraClient => {
   /**
    * Makes an authenticated request to the Jira API
    */
-  const makeRequest = async <T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> => {
+  const makeRequest = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
     const url = `${apiBaseUrl}${endpoint}`;
     const headers = new Headers(options.headers);
     headers.set("Authorization", await getAuthHeader());
@@ -167,9 +158,7 @@ export const initialize = (config: JiraConfig): JiraClient => {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Unknown error");
-      throw new Error(
-        `Jira API error: ${response.status} ${response.statusText}. ${errorText}`
-      );
+      throw new Error(`Jira API error: ${response.status} ${response.statusText}. ${errorText}`);
     }
 
     // Handle 204 No Content responses
@@ -259,8 +248,7 @@ export const initialize = (config: JiraConfig): JiraClient => {
         );
 
         for (const linkedIssue of issuesToCheck) {
-          const issueTypeName =
-            linkedIssue.fields?.issuetype?.name?.toLowerCase() || "";
+          const issueTypeName = linkedIssue.fields?.issuetype?.name?.toLowerCase() || "";
 
           // If it's a test-related link or the linked issue is a test type
           if (
@@ -327,10 +315,7 @@ export const initialize = (config: JiraConfig): JiraClient => {
       return testCaseReferences;
     },
 
-    async postTestResults(
-      ticketKey: string,
-      testResults: unknown
-    ): Promise<JiraAPIResponse> {
+    async postTestResults(ticketKey: string, testResults: unknown): Promise<JiraAPIResponse> {
       // Format test results as a comment
       const resultsText = JSON.stringify(testResults, null, 2);
       const commentBody = `Test Execution Results:\n\n\`\`\`\n${resultsText}\n\`\`\``;
@@ -339,13 +324,10 @@ export const initialize = (config: JiraConfig): JiraClient => {
         body: createAdfBody(commentBody),
       };
 
-      const comment = await makeRequest<CommentResponse>(
-        `/issue/${ticketKey}/comment`,
-        {
-          method: "POST",
-          body: JSON.stringify(commentPayload),
-        }
-      );
+      const comment = await makeRequest<CommentResponse>(`/issue/${ticketKey}/comment`, {
+        method: "POST",
+        body: JSON.stringify(commentPayload),
+      });
 
       // Get the issue to return the full response
       const issue = await makeRequest<JiraAPIResponse>(`/issue/${ticketKey}`);
@@ -356,10 +338,7 @@ export const initialize = (config: JiraConfig): JiraClient => {
       };
     },
 
-    async updateTicket(
-      ticketKey: string,
-      summary: string
-    ): Promise<JiraAPIResponse> {
+    async updateTicket(ticketKey: string, summary: string): Promise<JiraAPIResponse> {
       // Add comment with test execution summary
       const commentPayload = {
         body: createAdfBody(summary),

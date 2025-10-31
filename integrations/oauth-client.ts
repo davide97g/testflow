@@ -39,9 +39,7 @@ export const generatePKCE = (): PKCEParams => {
   const codeVerifier = randomBytes(32).toString("base64url");
 
   // Generate code challenge (SHA256 hash of verifier, base64url encoded)
-  const codeChallenge = createHash("sha256")
-    .update(codeVerifier)
-    .digest("base64url");
+  const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
 
   return {
     codeVerifier,
@@ -104,9 +102,7 @@ export const exchangeCodeForTokens = async (
 
   // Add client credentials to Authorization header if secret is provided
   if (config.clientSecret) {
-    const credentials = Buffer.from(
-      `${config.clientId}:${config.clientSecret}`
-    ).toString("base64");
+    const credentials = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64");
     headers.Authorization = `Basic ${credentials}`;
   } else {
     // Some OAuth providers require client_id in body when no secret
@@ -165,9 +161,7 @@ export const refreshAccessToken = async (
 
   // Add client credentials to Authorization header if secret is provided
   if (config.clientSecret) {
-    const credentials = Buffer.from(
-      `${config.clientId}:${config.clientSecret}`
-    ).toString("base64");
+    const credentials = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64");
     headers.Authorization = `Basic ${credentials}`;
   } else {
     body.set("client_id", config.clientId);

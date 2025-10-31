@@ -47,9 +47,7 @@ export class Win32TokenStorage implements TokenStorage {
     } catch (error) {
       // Ignore errors if key doesn't exist
       if (!(error as Error).message.includes("not found")) {
-        throw new Error(
-          `Failed to delete tokens from credential manager: ${error}`
-        );
+        throw new Error(`Failed to delete tokens from credential manager: ${error}`);
       }
     }
   }

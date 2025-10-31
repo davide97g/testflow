@@ -10,11 +10,7 @@ import {
   type OAuthConfig,
   refreshAccessToken,
 } from "./oauth-client";
-import {
-  createTokenStorage,
-  isTokenExpired,
-  type StoredTokens,
-} from "./token-storage";
+import { createTokenStorage, isTokenExpired, type StoredTokens } from "./token-storage";
 
 /**
  * Gets a valid access token for a service, refreshing if necessary
@@ -34,25 +30,18 @@ export const getValidAccessToken = async (
     try {
       // Refresh token
       const clientId = process.env[`${service.toUpperCase()}_OAUTH_CLIENT_ID`];
-      const clientSecret =
-        process.env[`${service.toUpperCase()}_OAUTH_CLIENT_SECRET`];
+      const clientSecret = process.env[`${service.toUpperCase()}_OAUTH_CLIENT_SECRET`];
 
       if (!clientId) {
-        console.warn(
-          `No OAuth client ID configured for ${service}, cannot refresh token`
-        );
+        console.warn(`No OAuth client ID configured for ${service}, cannot refresh token`);
         return tokens.accessToken; // Return expired token, may fail on API call
       }
 
       const config: OAuthConfig = {
         clientId,
         clientSecret,
-        redirectUri: `http://localhost:${
-          service === "jira" ? "3000" : "3001"
-        }/callback`,
-        ...(service === "jira"
-          ? ATLASSIAN_OAUTH_CONFIG
-          : BITBUCKET_OAUTH_CONFIG),
+        redirectUri: `http://localhost:${service === "jira" ? "3000" : "3001"}/callback`,
+        ...(service === "jira" ? ATLASSIAN_OAUTH_CONFIG : BITBUCKET_OAUTH_CONFIG),
       };
 
       const newTokens = await refreshAccessToken(config, tokens.refreshToken);
@@ -62,9 +51,7 @@ export const getValidAccessToken = async (
         ...tokens,
         accessToken: newTokens.accessToken,
         refreshToken: newTokens.refreshToken || tokens.refreshToken,
-        expiresAt: newTokens.expiresIn
-          ? Date.now() + newTokens.expiresIn * 1000
-          : tokens.expiresAt,
+        expiresAt: newTokens.expiresIn ? Date.now() + newTokens.expiresIn * 1000 : tokens.expiresAt,
       };
 
       await storage.storeTokens(service, updatedTokens);
