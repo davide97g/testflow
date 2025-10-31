@@ -1,49 +1,107 @@
 /**
  * Zephyr Client
  *
- * Zephyr API helper functions for test case retrieval and execution.
+ * Zephyr Scale API helper functions for test case retrieval and execution.
  * Handles authentication and test case data fetching.
+ *
+ * API Documentation: https://support.smartbear.com/zephyr-scale-cloud/api-docs
  */
 
 export interface ZephyrConfig {
   apiToken: string;
-  baseUrl: string;
+  baseUrl?: string;
   [key: string]: unknown;
 }
 
 export interface ZephyrClient {
-  getTestCase(testCaseId: string): Promise<TestCase>;
-  getTestSteps(testCaseId: string): Promise<TestStep[]>;
-  getTestCases(testCaseIds: string[]): Promise<TestCase[]>;
-  createTestExecution(testCaseId: string, executionData: ExecutionData): Promise<ExecutionRecord>;
+  getTestCase(testCaseKey: string): Promise<TestCase>;
+  getTestSteps(testCaseKey: string): Promise<TestStep[]>;
+  getTestCases(testCaseKeys: string[]): Promise<TestCase[]>;
+  createTestExecution(
+    testCaseKey: string,
+    testCycleKey: string,
+    executionData: ExecutionData
+  ): Promise<ExecutionRecord>;
 }
 
 export interface TestCase {
-  id: string;
-  key?: string;
+  id: number;
+  key: string;
   name: string;
+  project?: {
+    id: number;
+    self: string;
+  };
+  objective?: string;
+  precondition?: string;
+  estimatedTime?: number;
+  labels?: string[];
   [key: string]: unknown;
 }
 
 export interface TestStep {
-  id: string;
+  id: number;
   order: number;
-  instructions: string;
-  expectedResult?: string;
+  inline?: {
+    description: string;
+    expectedResult?: string;
+    testData?: string;
+    attachments?: Array<{
+      id: number;
+      fileName: string;
+      fileSize: number;
+      createdOn: string;
+      self: string;
+    }>;
+  };
+  testCase?: {
+    id: number;
+    key: string;
+    name: string;
+    self: string;
+  };
   [key: string]: unknown;
 }
 
 export interface ExecutionData {
-  status: "passed" | "failed" | "skipped";
-  duration?: number;
+  status: "Pass" | "Fail" | "In Progress" | "Blocked" | "Not Executed";
+  executionTime?: number;
+  comment?: string;
+  environmentName?: string;
+  testScriptResults?: Array<{
+    stepId: number;
+    status: "Pass" | "Fail" | "In Progress" | "Blocked" | "Not Executed";
+    comment?: string;
+    executionTime?: number;
+  }>;
   [key: string]: unknown;
 }
 
 export interface ExecutionRecord {
-  id: string;
-  testCaseId: string;
-  status: "passed" | "failed" | "skipped";
+  id: number;
+  key: string;
+  testCase?: {
+    id: number;
+    self: string;
+  };
+  testCycle?: {
+    id: number;
+    self: string;
+  };
+  testExecutionStatus?: {
+    id: number;
+    name: string;
+    self: string;
+  };
+  executionTime?: number;
+  comment?: string;
   [key: string]: unknown;
+}
+
+interface InternalClientConfig {
+  apiToken: string;
+  baseUrl: string;
+  getAuthHeader: () => string;
 }
 
 /**
@@ -52,66 +110,135 @@ export interface ExecutionRecord {
  * @returns Configured Zephyr client instance
  */
 export const initialize = (config: ZephyrConfig): ZephyrClient => {
-  // TODO: Implement client initialization
-  // - Store API token and base URL
-  // - Set up HTTP client with authentication
-  // - Return client instance
-  throw new Error("Not implemented");
-};
+  const baseUrl =
+    config.baseUrl || "https://api.zephyrscale.smartbear.com/v2";
 
-/**
- * Fetches a test case by ID
- * @param testCaseId - Zephyr test case ID
- * @returns Promise resolving to test case object with steps and metadata
- */
-export const getTestCase = async (testCaseId: string): Promise<TestCase> => {
-  // TODO: Implement test case retrieval
-  // - Make API request to Zephyr API
-  // - Include authentication headers
-  // - Parse and return test case data
-  throw new Error("Not implemented");
-};
+  const clientConfig: InternalClientConfig = {
+    apiToken: config.apiToken,
+    baseUrl: baseUrl.replace(/\/$/, ""), // Remove trailing slash
+    getAuthHeader: () => `Bearer ${config.apiToken}`,
+  };
 
-/**
- * Fetches test steps for a test case
- * @param testCaseId - Zephyr test case ID
- * @returns Promise resolving to array of test step objects
- */
-export const getTestSteps = async (testCaseId: string): Promise<TestStep[]> => {
-  // TODO: Implement test step retrieval
-  // - Fetch test steps from Zephyr API
-  // - Include step order, instructions, and expected results
-  // - Return array of test step objects
-  throw new Error("Not implemented");
-};
+  const makeRequest = async <T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> => {
+    const url = `${clientConfig.baseUrl}${endpoint}`;
+    const headers = new Headers(options.headers);
+    headers.set("Authorization", clientConfig.getAuthHeader());
+    headers.set("Accept", "application/json");
+    headers.set("Content-Type", "application/json");
 
-/**
- * Fetches multiple test cases by IDs
- * @param testCaseIds - Array of test case IDs
- * @returns Promise resolving to array of test case objects
- */
-export const getTestCases = async (testCaseIds: string[]): Promise<TestCase[]> => {
-  // TODO: Implement bulk test case retrieval
-  // - Fetch multiple test cases in parallel
-  // - Handle errors for individual cases
-  // - Return array of test case objects
-  throw new Error("Not implemented");
-};
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
 
-/**
- * Creates a test execution record in Zephyr
- * @param testCaseId - Zephyr test case ID
- * @param executionData - Test execution data (status, duration, etc.)
- * @returns Promise resolving to created execution record
- */
-export const createTestExecution = async (
-  testCaseId: string,
-  executionData: ExecutionData
-): Promise<ExecutionRecord> => {
-  // TODO: Implement execution record creation
-  // - Format execution data for Zephyr API
-  // - Create execution record
-  // - Link to test case and cycle if applicable
-  // - Return created execution object
-  throw new Error("Not implemented");
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "Unknown error");
+      throw new Error(
+        `Zephyr API error: ${response.status} ${response.statusText} - ${errorText}`
+      );
+    }
+
+    return (await response.json()) as T;
+  };
+
+  return {
+    getTestCase: async (testCaseKey: string) => {
+      // Test case keys are in format PROJECT-T123
+      // API endpoint: GET /testcases/{testCaseKey}
+      return makeRequest<TestCase>(`/testcases/${testCaseKey}`);
+    },
+    getTestSteps: async (testCaseKey: string) => {
+      // API endpoint: GET /testcases/{testCaseKey}/teststeps
+      // Returns paginated response with maxResults and startAt
+      const allSteps: TestStep[] = [];
+      let startAt = 0;
+      const maxResults = 100;
+      let hasMore = true;
+
+      while (hasMore) {
+        const params = new URLSearchParams({
+          startAt: startAt.toString(),
+          maxResults: maxResults.toString(),
+        });
+        const response = await makeRequest<{
+          values: TestStep[];
+          startAt: number;
+          maxResults: number;
+          total: number;
+          isLast: boolean;
+        }>(`/testcases/${testCaseKey}/teststeps?${params.toString()}`);
+
+        allSteps.push(...response.values);
+        hasMore = !response.isLast;
+        startAt += response.maxResults;
+      }
+
+      // Sort steps by order to ensure correct sequence
+      return allSteps.sort((a, b) => a.order - b.order);
+    },
+    getTestCases: async (testCaseKeys: string[]) => {
+      // Fetch multiple test cases in parallel
+      const promises = testCaseKeys.map((key) =>
+        makeRequest<TestCase>(`/testcases/${key}`).catch((error) => {
+          // Log error but continue with other requests
+          console.error(`Failed to fetch test case ${key}:`, error);
+          return null;
+        })
+      );
+
+      const results = await Promise.all(promises);
+      // Filter out null results from failed requests
+      return results.filter((result): result is TestCase => result !== null);
+    },
+    createTestExecution: async (
+      testCaseKey: string,
+      testCycleKey: string,
+      executionData: ExecutionData
+    ) => {
+      // API endpoint: POST /testexecutions
+      // Requires: projectKey, testCaseKey, testCycleKey, statusName
+      // First, get the test case to extract projectKey
+      const testCase = await makeRequest<TestCase>(`/testcases/${testCaseKey}`);
+
+      if (!testCase.project) {
+        throw new Error(`Test case ${testCaseKey} does not have a project`);
+      }
+
+      // Get project key from test case key (format: PROJECT-T123, extract PROJECT)
+      const projectKeyMatch = testCaseKey.match(/^([A-Z][A-Z_0-9]+)-/);
+      if (!projectKeyMatch) {
+        throw new Error(`Invalid test case key format: ${testCaseKey}`);
+      }
+      const projectKey = projectKeyMatch[1];
+
+      // Map status to Zephyr status names
+      const statusName = executionData.status;
+
+      const requestBody = {
+        projectKey,
+        testCaseKey,
+        testCycleKey,
+        statusName,
+        ...(executionData.executionTime !== undefined && {
+          executionTime: executionData.executionTime,
+        }),
+        ...(executionData.comment && { comment: executionData.comment }),
+        ...(executionData.environmentName && {
+          environmentName: executionData.environmentName,
+        }),
+        ...(executionData.testScriptResults && {
+          testScriptResults: executionData.testScriptResults,
+        }),
+        ...executionData,
+      };
+
+      return makeRequest<ExecutionRecord>("/testexecutions", {
+        method: "POST",
+        body: JSON.stringify(requestBody),
+      });
+    },
+  };
 };
