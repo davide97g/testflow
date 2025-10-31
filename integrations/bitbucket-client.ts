@@ -67,7 +67,7 @@ interface InternalClientConfig {
   apiToken: string;
   baseUrl: string;
   email?: string;
-  getAuthHeader: () => string;
+  getAuthHeader: () => string | Promise<string>;
 }
 
 /**
@@ -77,33 +77,54 @@ interface InternalClientConfig {
  */
 export const initialize = (config: BitbucketConfig): BitbucketClient => {
   const baseUrl = config.baseUrl || "https://api.bitbucket.org/2.0";
+  const { apiToken, email } = config;
 
-  // Determine authentication method
-  // If token contains ':', assume it's email:token format for Basic Auth
-  // Otherwise, check if email is provided for Basic Auth, or use Bearer token
-  const tokenContainsColon = config.apiToken.includes(":");
-  let getAuthHeader: () => string;
+  /**
+   * Gets the authorization header for a request
+   * Prefers OAuth tokens if available, falls back to API token
+   */
+  const getAuthHeader = async (): Promise<string> => {
+    // Try to get OAuth token first
+    const { getValidAccessToken } = await import("./token-helper");
+    const oauthToken = await getValidAccessToken("bitbucket");
 
-  if (tokenContainsColon) {
-    // API token in email:token format - use Basic Auth directly
-    const credentials = Buffer.from(config.apiToken).toString("base64");
-    getAuthHeader = () => `Basic ${credentials}`;
-  } else if (config.email) {
-    // API token with separate email - use Basic Auth with email:token
-    const credentials = Buffer.from(
-      `${config.email}:${config.apiToken}`
-    ).toString("base64");
-    getAuthHeader = () => `Basic ${credentials}`;
-  } else {
-    // Assume it's an access token - use Bearer auth
-    getAuthHeader = () => `Bearer ${config.apiToken}`;
-  }
+    if (oauthToken) {
+      return `Bearer ${oauthToken}`;
+    }
+
+    // Fall back to API token if OAuth not available
+    if (!apiToken) {
+      throw new Error(
+        "No authentication method available. Please set up OAuth or provide an API token."
+      );
+    }
+
+    // Determine authentication method for API token
+    const tokenContainsColon = apiToken.includes(":");
+
+    if (tokenContainsColon) {
+      // API token in email:token format - use Basic Auth directly
+      const credentials = Buffer.from(apiToken).toString("base64");
+      return `Basic ${credentials}`;
+    } else if (email) {
+      // API token with separate email - use Basic Auth with email:token
+      const credentials = Buffer.from(`${email}:${apiToken}`).toString(
+        "base64"
+      );
+      return `Basic ${credentials}`;
+    } else {
+      // Assume it's an access token - use Bearer auth
+      return `Bearer ${apiToken}`;
+    }
+  };
 
   const clientConfig: InternalClientConfig = {
-    apiToken: config.apiToken,
+    apiToken: config.apiToken || "",
     baseUrl: baseUrl.replace(/\/$/, ""), // Remove trailing slash
     email: config.email,
-    getAuthHeader,
+    getAuthHeader: () => {
+      throw new Error("getAuthHeader must be called asynchronously");
+    },
   };
 
   const makeRequest = async <T>(
@@ -112,7 +133,7 @@ export const initialize = (config: BitbucketConfig): BitbucketClient => {
   ): Promise<T> => {
     const url = `${clientConfig.baseUrl}${endpoint}`;
     const headers = new Headers(options.headers);
-    headers.set("Authorization", clientConfig.getAuthHeader());
+    headers.set("Authorization", await getAuthHeader());
 
     // For diff endpoints, accept text/plain, otherwise JSON
     if (endpoint.includes("/diff")) {

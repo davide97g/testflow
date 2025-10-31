@@ -101,7 +101,7 @@ export interface ExecutionRecord {
 interface InternalClientConfig {
   apiToken: string;
   baseUrl: string;
-  getAuthHeader: () => string;
+  getAuthHeader: () => string | Promise<string>;
 }
 
 /**
@@ -110,13 +110,38 @@ interface InternalClientConfig {
  * @returns Configured Zephyr client instance
  */
 export const initialize = (config: ZephyrConfig): ZephyrClient => {
-  const baseUrl =
-    config.baseUrl || "https://api.zephyrscale.smartbear.com/v2";
+  const baseUrl = config.baseUrl || "https://api.zephyrscale.smartbear.com/v2";
+  const { apiToken } = config;
+
+  /**
+   * Gets the authorization header for a request
+   * Prefers OAuth tokens if available, falls back to API token
+   */
+  const getAuthHeader = async (): Promise<string> => {
+    // Try to get stored Zephyr token first
+    const { getZephyrToken } = await import("./token-helper");
+    const storedToken = await getZephyrToken();
+
+    if (storedToken) {
+      return `Bearer ${storedToken}`;
+    }
+
+    // Fall back to API token from config
+    if (apiToken) {
+      return `Bearer ${apiToken}`;
+    }
+
+    throw new Error(
+      "No Zephyr API token available. Please set up a token or provide one in config."
+    );
+  };
 
   const clientConfig: InternalClientConfig = {
-    apiToken: config.apiToken,
+    apiToken: config.apiToken || "",
     baseUrl: baseUrl.replace(/\/$/, ""), // Remove trailing slash
-    getAuthHeader: () => `Bearer ${config.apiToken}`,
+    getAuthHeader: () => {
+      throw new Error("getAuthHeader must be called asynchronously");
+    },
   };
 
   const makeRequest = async <T>(
@@ -125,7 +150,7 @@ export const initialize = (config: ZephyrConfig): ZephyrClient => {
   ): Promise<T> => {
     const url = `${clientConfig.baseUrl}${endpoint}`;
     const headers = new Headers(options.headers);
-    headers.set("Authorization", clientConfig.getAuthHeader());
+    headers.set("Authorization", await getAuthHeader());
     headers.set("Accept", "application/json");
     headers.set("Content-Type", "application/json");
 

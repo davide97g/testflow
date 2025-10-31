@@ -15,7 +15,10 @@ export interface JiraConfig {
 export interface JiraClient {
   getTicket(ticketKey: string): Promise<JiraTicket>;
   getLinkedTestCases(ticketKey: string): Promise<TestCaseReference[]>;
-  postTestResults(ticketKey: string, testResults: unknown): Promise<JiraAPIResponse>;
+  postTestResults(
+    ticketKey: string,
+    testResults: unknown
+  ): Promise<JiraAPIResponse>;
   updateTicket(ticketKey: string, summary: string): Promise<JiraAPIResponse>;
 }
 
@@ -40,35 +43,6 @@ export interface JiraAPIResponse {
   id: string;
   key: string;
   [key: string]: unknown;
-}
-
-interface IssueLink {
-  id: string;
-  type: {
-    name: string;
-    inward: string;
-    outward: string;
-  };
-  inwardIssue?: {
-    id: string;
-    key: string;
-    fields?: {
-      issuetype?: {
-        name: string;
-      };
-      [key: string]: unknown;
-    };
-  };
-  outwardIssue?: {
-    id: string;
-    key: string;
-    fields?: {
-      issuetype?: {
-        name: string;
-      };
-      [key: string]: unknown;
-    };
-  };
 }
 
 interface CommentResponse {
@@ -100,7 +74,10 @@ interface CommentResponse {
  * @param apiToken - Jira API token
  * @returns Base64 encoded authorization header value
  */
-const createAuthHeader = (email: string | undefined, apiToken: string): string => {
+const createAuthHeader = (
+  email: string | undefined,
+  apiToken: string
+): string => {
   const credentials = email ? `${email}:${apiToken}` : `:${apiToken}`;
   return Buffer.from(credentials).toString("base64");
 };
@@ -110,7 +87,9 @@ const createAuthHeader = (email: string | undefined, apiToken: string): string =
  * @param text - Plain text to convert to ADF
  * @returns ADF formatted body object
  */
-const createAdfBody = (text: string): { type: string; version: number; content: Array<unknown> } => {
+const createAdfBody = (
+  text: string
+): { type: string; version: number; content: Array<unknown> } => {
   return {
     type: "doc",
     version: 1,
@@ -136,14 +115,37 @@ const createAdfBody = (text: string): { type: string; version: number; content: 
 export const initialize = (config: JiraConfig): JiraClient => {
   const { apiToken, baseUrl, email } = config;
 
-  if (!apiToken || !baseUrl) {
-    throw new Error("API token and base URL are required");
+  if (!baseUrl) {
+    throw new Error("Base URL is required");
   }
 
   // Normalize base URL (remove trailing slash)
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
   const apiBaseUrl = `${normalizedBaseUrl}/rest/api/3`;
-  const authHeader = createAuthHeader(email, apiToken);
+
+  /**
+   * Gets the authorization header for a request
+   * Prefers OAuth tokens if available, falls back to API token
+   */
+  const getAuthHeader = async (): Promise<string> => {
+    // Try to get OAuth token first
+    const { getValidAccessToken } = await import("./token-helper");
+    const oauthToken = await getValidAccessToken("jira");
+
+    if (oauthToken) {
+      return `Bearer ${oauthToken}`;
+    }
+
+    // Fall back to API token if OAuth not available
+    if (apiToken) {
+      const authHeader = createAuthHeader(email, apiToken);
+      return `Basic ${authHeader}`;
+    }
+
+    throw new Error(
+      "No authentication method available. Please set up OAuth or provide an API token."
+    );
+  };
 
   /**
    * Makes an authenticated request to the Jira API
@@ -154,7 +156,7 @@ export const initialize = (config: JiraConfig): JiraClient => {
   ): Promise<T> => {
     const url = `${apiBaseUrl}${endpoint}`;
     const headers = new Headers(options.headers);
-    headers.set("Authorization", `Basic ${authHeader}`);
+    headers.set("Authorization", await getAuthHeader());
     headers.set("Accept", "application/json");
     headers.set("Content-Type", "application/json");
 
@@ -252,13 +254,13 @@ export const initialize = (config: JiraConfig): JiraClient => {
           linkOutward.includes("test");
 
         // Check both inward and outward issues
-        const issuesToCheck = [
-          link.inwardIssue,
-          link.outwardIssue,
-        ].filter((issue): issue is NonNullable<typeof issue> => issue !== undefined);
+        const issuesToCheck = [link.inwardIssue, link.outwardIssue].filter(
+          (issue): issue is NonNullable<typeof issue> => issue !== undefined
+        );
 
         for (const linkedIssue of issuesToCheck) {
-          const issueTypeName = linkedIssue.fields?.issuetype?.name?.toLowerCase() || "";
+          const issueTypeName =
+            linkedIssue.fields?.issuetype?.name?.toLowerCase() || "";
 
           // If it's a test-related link or the linked issue is a test type
           if (
@@ -317,7 +319,7 @@ export const initialize = (config: JiraConfig): JiraClient => {
             }
           }
         }
-      } catch (error) {
+      } catch {
         // Remote links might not be available or might fail, continue without them
         // This is expected if issue linking is not configured or permissions are insufficient
       }
@@ -354,7 +356,10 @@ export const initialize = (config: JiraConfig): JiraClient => {
       };
     },
 
-    async updateTicket(ticketKey: string, summary: string): Promise<JiraAPIResponse> {
+    async updateTicket(
+      ticketKey: string,
+      summary: string
+    ): Promise<JiraAPIResponse> {
       // Add comment with test execution summary
       const commentPayload = {
         body: createAdfBody(summary),

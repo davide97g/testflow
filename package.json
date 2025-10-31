@@ -9,6 +9,8 @@
     "run-tests": "bun cli/run-tests.ts",
     "report": "bun cli/report.ts",
     "setup-env": "./scripts/setup-env.sh",
+    "setup-auth": "bun cli/setup-auth.ts",
+    "check-tokens": "bun cli/check-tokens.ts",
     "type-check": "tsc --noEmit",
     "lint": "bunx @biomejs/biome lint .",
     "format": "bunx @biomejs/biome format --write .",
@@ -35,6 +37,10 @@
   "homepage": "https://github.com/davide97g/testflow#readme",
   "engines": {
     "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "keytar": "^7.9.0",
+    "open": "^10.1.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.2",
