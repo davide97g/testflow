@@ -1,55 +1,33 @@
 {
-  "name": "ai-test-validation",
-  "version": "1.0.0",
-  "description": "AI-Assisted Test Validation system for automated regression testing",
-  "main": "dist/index.js",
+  "name": "testflow",
+  "version": "0.2.0",
+  "description": "Framework for automating testing with Playwright and AI",
+  "author": "Bitrock",
+  "main": "electron/main.js",
   "scripts": {
-    "build": "tsc",
-    "fetch-tests": "bun cli/fetch-tests.ts",
-    "run-tests": "bun cli/run-tests.ts",
-    "report": "bun cli/report.ts",
-    "setup-env": "./scripts/setup-env.sh",
-    "setup-auth": "bun cli/setup-auth.ts",
-    "check-tokens": "bun cli/check-tokens.ts",
-    "test-integrations": "bun cli/test-integrations.ts",
-    "test-integrations:bitbucket": "bun cli/test-integrations.ts bitbucket",
-    "test-integrations:jira": "bun cli/test-integrations.ts jira",
-    "test-integrations:zephyr": "bun cli/test-integrations.ts zephyr",
-    "type-check": "tsc --noEmit",
-    "lint": "bunx @biomejs/biome lint .",
-    "format": "bunx @biomejs/biome format --write .",
-    "check": "bunx @biomejs/biome check .",
-    "check:fix": "bunx @biomejs/biome check --write ."
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/davide97g/testflow.git"
-  },
-  "keywords": [
-    "testing",
-    "ai",
-    "zephyr",
-    "jira",
-    "bitbucket",
-    "automation"
-  ],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/davide97g/testflow/issues"
-  },
-  "homepage": "https://github.com/davide97g/testflow#readme",
-  "engines": {
-    "node": ">=14.0.0"
+    "start": "electron .",
+    "dev": "ELECTRON_DEV=1 concurrently \"vite --cwd renderer\" \"electron .\"",
+    "build:renderer": "cd renderer && vite build",
+    "build": "npm run build:renderer && electron-builder",
+    "prestart": "npm run build:renderer"
   },
   "dependencies": {
-    "keytar": "^7.9.0",
-    "open": "^10.1.0"
+    "axios": "^1.4.0",
+    "express": "^4.18.2",
+    "open": "^8.4.0",
+    "cross-spawn": "^7.0.5",
+    "playwright": "^1.40.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.2",
-    "@types/node": "^20.10.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "electron": "^26.0.0",
+    "concurrently": "^8.0.0",
+    "vite": "^5.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "tailwindcss": "^3.4.0",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "electron-builder": "^24.9.1"
   }
 }
