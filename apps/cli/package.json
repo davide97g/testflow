@@ -1,0 +1,74 @@
+{
+  "name": "@testflow/cli",
+  "version": "0.2.0",
+  "description": "Framework for testing and automation",
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "prompts/llm-prompt.md",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsgo && mkdir -p dist/prompts && cp prompts/llm-prompt.md dist/prompts/llm-prompt.md",
+    "prepublishOnly": "bun run build",
+    "extract": "bun run src/index.ts extract",
+    "extract:jira": "bun run src/index.ts extract",
+    "extract:pr": "bun run src/index.ts extract:pr",
+    "init": "bun run src/index.ts init",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davide97g/testflow.git"
+  },
+  "keywords": [
+    "testflow",
+    "testing",
+    "automation",
+    "jira",
+    "bitbucket",
+    "cli"
+  ],
+  "author": "Davide Ghiotto",
+  "license": "MIT",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/davide97g/testflow/issues"
+  },
+  "homepage": "https://github.com/davide97g/testflow#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "public"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.6",
+    "@types/bun": "latest",
+    "@types/node": "^24.10.1",
+    "@typescript/native-preview": "^7.0.0-dev.20251118.1"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^8.0.1",
+    "axios": "^1.13.2",
+    "chalk": "^5.6.2",
+    "commander": "^12.1.0",
+    "figlet": "^1.9.4",
+    "gradient-string": "^3.0.0",
+    "ora": "^9.0.0",
+    "zod": "^4.1.12"
+  },
+  "bin": {
+    "testflow": "dist/index.js"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}
+

@@ -1,8 +1,9 @@
 .env
 
-
 # Build output
 dist/
+build/
+.turbo/
 
 # Playwright
 /test-results/
@@ -25,3 +26,13 @@ node_modules/
 
 # testflow
 .testflow/
+
+# Vite
+*.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
