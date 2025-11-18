@@ -772,10 +772,12 @@ export const getIssuesByStatus = async ({
       }
     } else {
       // Use Search API when no board is specified
+      // Using enhanced JQL search endpoint: GET /rest/api/3/search/jql
+      // Reference: https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/#api-rest-api-3-search-jql-get
       spinner.text = `Fetching issues with JQL: ${jql}`;
 
       while (hasMore) {
-        const searchUrl = `${normalizedBaseUrl}/rest/api/3/search?jql=${encodeURIComponent(
+        const searchUrl = `${normalizedBaseUrl}/rest/api/3/search/jql?jql=${encodeURIComponent(
           jql
         )}&startAt=${startAt}&maxResults=${maxResults}&fields=key,summary,status`;
 
