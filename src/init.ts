@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-import { input } from "@inquirer/prompts";
+import { confirm, input } from "@inquirer/prompts";
 import chalk from "chalk";
 import figlet from "figlet";
 import fs from "fs-extra";
 import gradient from "gradient-string";
-import ora from "ora";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import ora from "ora";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,15 +16,25 @@ const colors = ["#A4A5A7", "#C74600", "#EB640A", "#F2A65D"];
 const dynamicGradient = gradient(colors);
 
 interface Config {
-  workspace: string;
-  repo: string;
-  jiraBaseUrl: string;
+  bitbucket: {
+    workspace: string;
+    repo: string;
+  };
+  jira: {
+    baseUrl: string;
+    boardId?: number;
+    assignee?: string;
+    statuses?: string[];
+  };
 }
 
 interface InitAnswers {
   workspace: string;
   repo: string;
   jiraBaseUrl: string;
+  boardId?: number;
+  assignee?: string;
+  statuses?: string[];
 }
 
 interface PackageJson {
@@ -48,7 +58,7 @@ const runBanner = async (): Promise<void> => {
       },
       (err, data) => {
         if (err) {
-          console.error(chalk.red(`❌ Figlet error: ${err.message}`));
+          console.error(chalk.red(`Figlet error: ${err.message}`));
           return resolve();
         }
 
@@ -61,7 +71,9 @@ const runBanner = async (): Promise<void> => {
           console.clear();
           console.log(chalk.bold(dynamicGradient.multiline(lines.join("\n"))));
           console.log(chalk.bold(dynamicGradient.multiline(`v${version}\n`)));
-          console.log(dynamicGradient("Framework for testing and automation\n"));
+          console.log(
+            dynamicGradient("Framework for testing and automation\n")
+          );
           i = (i + 1) % colors.length;
         }, 150);
 
@@ -75,17 +87,20 @@ const runBanner = async (): Promise<void> => {
   });
 };
 
-const loadDefaults = async (): Promise<Partial<Config>> => {
-  const defaults: Partial<Config> = {};
+const loadDefaults = async (): Promise<Partial<InitAnswers>> => {
+  const defaults: Partial<InitAnswers> = {};
 
   // Try to read existing config.json
   const configPath = path.join(process.cwd(), "config.json");
   try {
     if (await fs.pathExists(configPath)) {
       const existingConfig = (await fs.readJson(configPath)) as Config;
-      defaults.workspace = existingConfig.workspace;
-      defaults.repo = existingConfig.repo;
-      defaults.jiraBaseUrl = existingConfig.jiraBaseUrl;
+      defaults.workspace = existingConfig.bitbucket?.workspace;
+      defaults.repo = existingConfig.bitbucket?.repo;
+      defaults.jiraBaseUrl = existingConfig.jira?.baseUrl;
+      defaults.boardId = existingConfig.jira?.boardId;
+      defaults.assignee = existingConfig.jira?.assignee;
+      defaults.statuses = existingConfig.jira?.statuses;
     }
   } catch (error) {
     // Ignore errors reading config
@@ -112,7 +127,12 @@ const loadDefaults = async (): Promise<Partial<Config>> => {
   return defaults;
 };
 
-const collectAnswers = async (defaults: Partial<Config>): Promise<InitAnswers> => {
+const collectAnswers = async (
+  defaults: Partial<InitAnswers>
+): Promise<InitAnswers> => {
+  console.log(chalk.cyan("\n📦 Bitbucket Configuration"));
+  console.log(chalk.gray("─".repeat(40)));
+
   const workspace = await input({
     message: "Bitbucket workspace:",
     default: defaults.workspace || "",
@@ -130,6 +150,9 @@ const collectAnswers = async (defaults: Partial<Config>): Promise<InitAnswers> =
       return trimmed ? true : "Repository name is required";
     },
   });
+
+  console.log(chalk.cyan("\n🎯 Jira Configuration"));
+  console.log(chalk.gray("─".repeat(40)));
 
   const jiraBaseUrl = await input({
     message: "JIRA base URL:",
@@ -151,10 +174,92 @@ const collectAnswers = async (defaults: Partial<Config>): Promise<InitAnswers> =
     },
   });
 
+  // Optional: Board ID
+  const useBoardId = await confirm({
+    message: "Do you want to filter by a specific board?",
+    default: defaults.boardId !== undefined,
+  });
+
+  let boardId: number | undefined;
+  if (useBoardId) {
+    const boardIdStr = await input({
+      message: "Enter board ID:",
+      default: defaults.boardId?.toString() || "",
+      validate: (val: string) => {
+        const trimmed = (val ?? "").trim();
+        if (!trimmed) {
+          return "Board ID is required";
+        }
+        const parsed = parseInt(trimmed, 10);
+        if (isNaN(parsed)) {
+          return "Board ID must be a valid number";
+        }
+        return true;
+      },
+    });
+    boardId = parseInt(boardIdStr, 10);
+  }
+
+  // Optional: Assignee
+  const useAssignee = await confirm({
+    message: "Do you want to filter by assignee?",
+    default: defaults.assignee !== undefined,
+  });
+
+  let assignee: string | undefined;
+  if (useAssignee) {
+    assignee = await input({
+      message: "Enter assignee (username or email):",
+      default: defaults.assignee || "",
+      validate: (val: string) => {
+        const trimmed = (val ?? "").trim();
+        return trimmed ? true : "Assignee is required";
+      },
+    });
+  }
+
+  // Optional: Statuses
+  const useStatuses = await confirm({
+    message: "Do you want to configure default statuses?",
+    default: defaults.statuses !== undefined && defaults.statuses.length > 0,
+  });
+
+  let statuses: string[] | undefined;
+  if (useStatuses) {
+    const statusesInput = await input({
+      message:
+        "Enter statuses (comma-separated, e.g., 'To Do,In Progress,Pull Requested'):",
+      default:
+        defaults.statuses?.join(", ") ||
+        "To Do,In Progress,Pull Requested,Dev Release",
+      validate: (val: string) => {
+        const trimmed = (val ?? "").trim();
+        if (!trimmed) {
+          return "At least one status is required";
+        }
+        const parsed = trimmed
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (parsed.length === 0) {
+          return "At least one status is required";
+        }
+        return true;
+      },
+    });
+    statuses = statusesInput
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
   return {
     workspace: workspace.trim(),
     repo: repo.trim(),
     jiraBaseUrl: jiraBaseUrl.trim(),
+    boardId,
+    assignee: assignee?.trim(),
+    statuses,
   };
 };
 
@@ -167,9 +272,17 @@ const writeConfig = async (answers: InitAnswers): Promise<void> => {
   try {
     const configPath = path.join(process.cwd(), "config.json");
     const config: Config = {
-      workspace: answers.workspace,
-      repo: answers.repo,
-      jiraBaseUrl: answers.jiraBaseUrl,
+      bitbucket: {
+        workspace: answers.workspace,
+        repo: answers.repo,
+      },
+      jira: {
+        baseUrl: answers.jiraBaseUrl,
+        ...(answers.boardId !== undefined && { boardId: answers.boardId }),
+        ...(answers.assignee && { assignee: answers.assignee }),
+        ...(answers.statuses &&
+          answers.statuses.length > 0 && { statuses: answers.statuses }),
+      },
     };
 
     await fs.writeJson(configPath, config, { spaces: 2 });
@@ -178,7 +291,9 @@ const writeConfig = async (answers: InitAnswers): Promise<void> => {
     );
   } catch (error) {
     configSpinner.fail("Failed to write configuration");
-    console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+    console.error(
+      chalk.red(error instanceof Error ? error.message : String(error))
+    );
     process.exit(1);
   }
 };
@@ -224,15 +339,20 @@ const runInit = async (): Promise<void> => {
 
   // 5. Success message
   console.log("\n");
-  console.log(dynamicGradient("✅ Setup complete."));
-  console.log(chalk.gray("\nYou can now use testflow commands to extract JIRA issues and PR changes."));
+  console.log(dynamicGradient("Setup complete."));
+  console.log(
+    chalk.gray(
+      "\nYou can now use testflow commands to extract JIRA issues and PR changes."
+    )
+  );
 };
 
 // Run banner and init
 await runBanner();
 await runInit().catch((error) => {
-  console.error(chalk.red("\n❌ An unexpected error occurred:"));
-  console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+  console.error(chalk.red("\nAn unexpected error occurred:"));
+  console.error(
+    chalk.red(error instanceof Error ? error.message : String(error))
+  );
   process.exit(1);
 });
-

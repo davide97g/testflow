@@ -22,8 +22,21 @@ const getRelativePath = (absolutePath: string): string => {
 
 const config = JSON.parse(
   readFileSync(join(process.cwd(), "config.json"), "utf8")
-);
-const { jiraBaseUrl, workspace, repo } = config;
+) as {
+  bitbucket: {
+    workspace: string;
+    repo: string;
+  };
+  jira: {
+    baseUrl: string;
+    boardId?: number;
+    assignee?: string;
+    statuses?: string[];
+  };
+};
+
+const { workspace, repo } = config.bitbucket;
+const { baseUrl: jiraBaseUrl } = config.jira;
 
 const JIRA_EMAIL = process.env.JIRA_EMAIL;
 const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN;
@@ -38,7 +51,7 @@ if (!JIRA_API_TOKEN) {
 }
 
 if (!jiraBaseUrl) {
-  console.error(chalk.red("Error: jiraBaseUrl is required in config.json"));
+  console.error(chalk.red("Error: jira.baseUrl is required in config.json"));
   process.exit(1);
 }
 
@@ -151,35 +164,35 @@ export const getJiraIssue = async ({ issueIdOrKey }: JiraIssueParams) => {
           );
           if (axios.isAxiosError(v2Error)) {
             if (v2Error.response?.status === 401) {
-              console.error(chalk.red("❌ Authentication failed"));
+              console.error(chalk.red("Authentication failed"));
               process.exit(1);
             } else if (v2Error.response?.status === 404) {
-              console.error(chalk.red(`❌ Issue ${issueIdOrKey} not found`));
+              console.error(chalk.red(`Issue ${issueIdOrKey} not found`));
               process.exit(1);
             } else if (v2Error.response?.status === 403) {
-              console.error(chalk.red("❌ Access forbidden"));
+              console.error(chalk.red("Access forbidden"));
               process.exit(1);
             }
           }
-          console.error(chalk.red("❌ Failed to fetch issue"));
+          console.error(chalk.red("Failed to fetch issue"));
           process.exit(1);
         }
       } else if (error.response?.status === 401) {
         logError(error, `Authentication failed for Jira issue ${issueIdOrKey}`);
         issueSpinner.fail(chalk.red("Authentication failed"));
-        console.error(chalk.red("❌ Authentication failed"));
+        console.error(chalk.red("Authentication failed"));
         process.exit(1);
       } else if (error.response?.status === 403) {
         logError(error, `Access forbidden for Jira issue ${issueIdOrKey}`);
         issueSpinner.fail(chalk.red("Access forbidden"));
-        console.error(chalk.red("❌ Access forbidden"));
+        console.error(chalk.red("Access forbidden"));
         process.exit(1);
       } else {
         logError(error, `Failed to fetch Jira issue ${issueIdOrKey}`);
         issueSpinner.fail(
           chalk.red(`Failed to fetch Jira issue ${issueIdOrKey}`)
         );
-        console.error(chalk.red("❌ Failed to fetch issue"));
+        console.error(chalk.red("Failed to fetch issue"));
         process.exit(1);
       }
     } else {
@@ -187,7 +200,7 @@ export const getJiraIssue = async ({ issueIdOrKey }: JiraIssueParams) => {
       issueSpinner.fail(
         chalk.red(`Failed to fetch Jira issue ${issueIdOrKey}`)
       );
-      console.error(chalk.red("❌ Failed to fetch issue"));
+      console.error(chalk.red("Failed to fetch issue"));
       process.exit(1);
     }
   }
@@ -847,14 +860,14 @@ export const getIssuesByStatus = async ({
 
     if (axios.isAxiosError(error)) {
       if (error.response?.status === 401) {
-        console.error(chalk.red("❌ Authentication failed"));
+        console.error(chalk.red("Authentication failed"));
         process.exit(1);
       } else if (error.response?.status === 403) {
-        console.error(chalk.red("❌ Access forbidden"));
+        console.error(chalk.red("Access forbidden"));
         process.exit(1);
       } else if (error.response?.status === 404) {
         if (boardId) {
-          console.error(chalk.red(`❌ Board ${boardId} not found`));
+          console.error(chalk.red(`Board ${boardId} not found`));
         }
       }
     }
@@ -1164,7 +1177,7 @@ const processIssue = async (issueIdOrKey: string) => {
     }
   } catch (error) {
     logError(error, `Failed to fetch Jira issue ${issueIdOrKey}`);
-    console.error(chalk.red("❌ Failed to fetch Jira issue"));
+    console.error(chalk.red("Failed to fetch Jira issue"));
     process.exit(1);
   }
 };
@@ -1180,58 +1193,75 @@ const main = async () => {
   // If no issue ID provided, use interactive mode
   if (!issueIdOrKey) {
     try {
-      // Ask for board ID (optional)
-      const boardIdInput = await select({
-        message: "Do you want to filter by a specific board?",
-        choices: [
-          { name: "No, search all issues", value: "none" },
-          { name: "Yes, enter board ID", value: "yes" },
-        ],
-      });
+      // Use config values as defaults, or ask user
+      let boardId: number | undefined = config.jira?.boardId;
+      let assignee: string | undefined = config.jira?.assignee;
+      let statuses: string[] = config.jira?.statuses || [];
 
-      let boardId: number | undefined;
-      if (boardIdInput === "yes") {
-        const boardIdStr = await input({
-          message: "Enter board ID:",
+      // Ask for board ID (optional) if not in config
+      if (boardId === undefined) {
+        const boardIdInput = await select({
+          message: "Do you want to filter by a specific board?",
+          choices: [
+            { name: "No, search all issues", value: "none" },
+            { name: "Yes, enter board ID", value: "yes" },
+          ],
         });
-        boardId = parseInt(boardIdStr, 10);
-        if (isNaN(boardId)) {
-          console.error(chalk.red("Invalid board ID"));
+
+        if (boardIdInput === "yes") {
+          const boardIdStr = await input({
+            message: "Enter board ID:",
+          });
+          boardId = parseInt(boardIdStr, 10);
+          if (isNaN(boardId)) {
+            console.error(chalk.red("Invalid board ID"));
+            process.exit(1);
+          }
+        }
+      } else {
+        console.log(chalk.gray(`Using board ID from config: ${boardId}`));
+      }
+
+      // Ask for assignee (optional) if not in config
+      if (assignee === undefined) {
+        const assigneeInput = await select({
+          message: "Do you want to filter by assignee?",
+          choices: [
+            { name: "No, all assignees", value: "none" },
+            { name: "Yes, enter username/email", value: "yes" },
+          ],
+        });
+
+        if (assigneeInput === "yes") {
+          assignee = await input({
+            message: "Enter assignee (username or email):",
+          });
+        }
+      } else {
+        console.log(chalk.gray(`Using assignee from config: ${assignee}`));
+      }
+
+      // Ask for statuses if not in config
+      if (statuses.length === 0) {
+        const statusesInput = await input({
+          message:
+            "Enter statuses (comma-separated, e.g., 'To Do,In Progress,Pull Requested'):",
+          default: "To Do,In Progress,Pull Requested,Dev Release",
+        });
+
+        statuses = statusesInput
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        if (statuses.length === 0) {
+          console.error(chalk.red("At least one status is required"));
           process.exit(1);
         }
-      }
-
-      // Ask for assignee (optional)
-      const assigneeInput = await select({
-        message: "Do you want to filter by assignee?",
-        choices: [
-          { name: "No, all assignees", value: "none" },
-          { name: "Yes, enter username/email", value: "yes" },
-        ],
-      });
-
-      let assignee: string | undefined;
-      if (assigneeInput === "yes") {
-        assignee = await input({
-          message: "Enter assignee (username or email):",
-        });
-      }
-
-      // Ask for statuses
-      const statusesInput = await input({
-        message:
-          "Enter statuses (comma-separated, e.g., 'To Do,In Progress,Pull Requested'):",
-        default: "To Do,In Progress,Pull Requested,Dev Release",
-      });
-
-      const statuses = statusesInput
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-
-      if (statuses.length === 0) {
-        console.error(chalk.red("At least one status is required"));
-        process.exit(1);
+      } else {
+        console.log(
+          chalk.gray(`Using statuses from config: ${statuses.join(", ")}`)
+        );
       }
 
       // Fetch issues
@@ -1269,7 +1299,7 @@ const main = async () => {
         }
       }
       logError(error, "Failed in interactive mode");
-      console.error(chalk.red("❌ Failed to fetch issues"));
+      console.error(chalk.red("Failed to fetch issues"));
       process.exit(1);
     }
   } else {

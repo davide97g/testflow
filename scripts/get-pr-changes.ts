@@ -1,19 +1,33 @@
 import axios from "axios";
-import { appendFileSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import chalk from "chalk";
+import {
+  appendFileSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join, relative } from "node:path";
 import ora from "ora";
-import chalk from "chalk";
 
 // Helper function to convert absolute path to relative path
 const getRelativePath = (absolutePath: string): string => {
   const relativePath = relative(process.cwd(), absolutePath);
-  return relativePath.startsWith("..") ? absolutePath : `/${relativePath.replace(/\\/g, "/")}`;
+  return relativePath.startsWith("..")
+    ? absolutePath
+    : `/${relativePath.replace(/\\/g, "/")}`;
 };
 
 const config = JSON.parse(
   readFileSync(join(process.cwd(), "config.json"), "utf8")
-);
-const { workspace, repo } = config;
+) as {
+  bitbucket: {
+    workspace: string;
+    repo: string;
+  };
+};
+
+const { workspace, repo } = config.bitbucket;
 
 const BITBUCKET_BASE_URL = "https://api.bitbucket.org/2.0";
 const BITBUCKET_EMAIL = process.env.BITBUCKET_EMAIL;
@@ -21,7 +35,9 @@ const BITBUCKET_API_TOKEN = process.env.BITBUCKET_API_TOKEN;
 
 if (!BITBUCKET_EMAIL || !BITBUCKET_API_TOKEN) {
   console.error(
-    chalk.red("Error: BITBUCKET_EMAIL and BITBUCKET_API_TOKEN environment variables are required")
+    chalk.red(
+      "Error: BITBUCKET_EMAIL and BITBUCKET_API_TOKEN environment variables are required"
+    )
   );
   process.exit(1);
 }
@@ -32,24 +48,33 @@ const logError = (error: unknown, context: string) => {
   const errorDetails = {
     timestamp,
     context,
-    error: error instanceof Error ? {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-    } : String(error),
-    axiosError: axios.isAxiosError(error) ? {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      config: {
-        url: error.config?.url,
-        method: error.config?.method,
-        headers: error.config?.headers,
-      },
-    } : undefined,
+    error:
+      error instanceof Error
+        ? {
+            message: error.message,
+            stack: error.stack,
+            name: error.name,
+          }
+        : String(error),
+    axiosError: axios.isAxiosError(error)
+      ? {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+            headers: error.config?.headers,
+          },
+        }
+      : undefined,
   };
-  
-  const logEntry = `\n[${timestamp}] ${context}\n${JSON.stringify(errorDetails, null, 2)}\n`;
+
+  const logEntry = `\n[${timestamp}] ${context}\n${JSON.stringify(
+    errorDetails,
+    null,
+    2
+  )}\n`;
   appendFileSync(logPath, logEntry, "utf-8");
 };
 
@@ -264,7 +289,9 @@ export const getPRChanges = async ({
     diffstatSpinner.succeed(`  Fetched PR diffstat for PR #${prId}`);
   } catch (error) {
     logError(error, `Failed to fetch PR diffstat for PR ${prId}`);
-    diffstatSpinner.warn(chalk.yellow(`  PR diffstat not available for PR #${prId}`));
+    diffstatSpinner.warn(
+      chalk.yellow(`  PR diffstat not available for PR #${prId}`)
+    );
     if (!changes.errors) changes.errors = [];
     if (axios.isAxiosError(error) && error.response?.status === 403) {
       const errorData = error.response.data as {
@@ -388,7 +415,7 @@ const main = async () => {
 
     if (!ticketId) {
       ticketIdSpinner.fail(chalk.red("Could not extract ticket ID from PR"));
-      console.error(chalk.red("❌ Could not extract ticket ID from PR"));
+      console.error(chalk.red("Could not extract ticket ID from PR"));
       process.exit(1);
     }
     ticketIdSpinner.succeed(`Extracted ticket ID: ${ticketId}`);
@@ -426,11 +453,13 @@ const main = async () => {
       const filteredPatch = filterPatch(changes.patch);
       const patchPath = join(outputDir, "pr.patch");
       writeFileSync(patchPath, filteredPatch, "utf-8");
-      patchSaveSpinner.succeed(`  PR patch saved to: ${getRelativePath(patchPath)}`);
+      patchSaveSpinner.succeed(
+        `  PR patch saved to: ${getRelativePath(patchPath)}`
+      );
     }
   } catch (error) {
     logError(error, `Failed to fetch PR changes for PR ${prId}`);
-    console.error(chalk.red("❌ Failed to fetch PR changes"));
+    console.error(chalk.red("Failed to fetch PR changes"));
     process.exit(1);
   }
 };
