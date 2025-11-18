@@ -4,6 +4,7 @@ import { appendFileSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ora from "ora";
 import { loadConfigSync } from "../src/config.js";
+import { loadEnv } from "../src/env.js";
 
 // Helper function to convert absolute path to relative path
 const getRelativePath = (absolutePath: string): string => {
@@ -16,18 +17,17 @@ const getRelativePath = (absolutePath: string): string => {
 const config = loadConfigSync();
 const { workspace, repo } = config.bitbucket;
 
-const BITBUCKET_BASE_URL = "https://api.bitbucket.org/2.0";
-const BITBUCKET_EMAIL = process.env.BITBUCKET_EMAIL;
-const BITBUCKET_API_TOKEN = process.env.BITBUCKET_API_TOKEN;
-
-if (!BITBUCKET_EMAIL || !BITBUCKET_API_TOKEN) {
-  console.error(
-    chalk.red(
-      "Error: BITBUCKET_EMAIL and BITBUCKET_API_TOKEN environment variables are required"
-    )
-  );
+// Load and validate environment variables
+let env;
+try {
+  env = loadEnv();
+} catch (error) {
+  console.error(chalk.red(error instanceof Error ? error.message : String(error)));
   process.exit(1);
 }
+
+const BITBUCKET_BASE_URL = "https://api.bitbucket.org/2.0";
+const { BITBUCKET_EMAIL, BITBUCKET_API_TOKEN } = env;
 
 const logError = (error: unknown, context: string) => {
   const logPath = join(process.cwd(), "testflow.log");
