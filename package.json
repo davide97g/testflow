@@ -1,6 +1,6 @@
 {
   "name": "@davide97g/testflow",
-  "version": "0.1.3",
+  "version": "0.1.6",
   "description": "Framework for testing and automation",
   "main": "./dist/index.js",
   "files": [
@@ -11,7 +11,7 @@
     "package.json"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsgo",
+    "build": "rm -rf dist && tsgo && mkdir -p dist/prompts && cp prompts/llm-prompt.md dist/prompts/llm-prompt.md && chmod +x dist/index.js",
     "prepublishOnly": "bun run build",
     "extract": "bun run src/index.ts extract",
     "extract:jira": "bun run src/index.ts extract",

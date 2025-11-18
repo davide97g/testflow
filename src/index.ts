@@ -26,13 +26,36 @@ program
   .version(version);
 
 const runNodeScript = (scriptPath: string, args: string[] = []): void => {
-  // Use .js extension for built files, fallback to .ts for development
-  const jsPath = scriptPath.replace(/\.ts$/, ".js");
-  const fullPath = path.join(__dirname, "..", jsPath);
-  const tsPath = path.join(__dirname, "..", scriptPath);
+  // Determine if we're running from dist (production) or src (development)
+  const isDist =
+    __dirname.includes("dist") || path.basename(__dirname) === "dist";
 
-  // Try .js first (production), then .ts (development)
-  const scriptToRun = existsSync(fullPath) ? fullPath : tsPath;
+  let scriptToRun: string;
+
+  if (isDist) {
+    // Running from dist: scripts are in the same dist folder
+    // Convert ./src/init.ts -> ./init.js
+    const jsPath = scriptPath
+      .replace(/^\.\/src\//, "./")
+      .replace(/\.ts$/, ".js");
+    scriptToRun = path.join(__dirname, jsPath);
+
+    // Fallback: try without the ./ prefix
+    if (!existsSync(scriptToRun)) {
+      const altPath = path.join(__dirname, path.basename(jsPath));
+      if (existsSync(altPath)) {
+        scriptToRun = altPath;
+      }
+    }
+  } else {
+    // Running from src (development): use original path
+    scriptToRun = path.join(__dirname, "..", scriptPath);
+  }
+
+  if (!existsSync(scriptToRun)) {
+    console.error(`Error: Script not found at ${scriptToRun}`);
+    process.exit(1);
+  }
 
   const result = spawnSync("bun", [scriptToRun, ...args], {
     stdio: "inherit",

@@ -344,23 +344,23 @@ const createEditorRule = async (): Promise<void> => {
   const ruleFilePath = path.join(filePath, fileName);
 
   // Read the prompt file - try multiple possible locations
-  // 1. In dist folder (when running from installed package - same dir as init.js)
-  // 2. In prompts folder (when running from source)
+  // 1. In prompts folder at project root (when running from dist or src)
+  // 2. In dist/prompts folder (when running from compiled dist - after build)
   let promptContent: string;
-  const distPromptPath = path.join(__dirname, "llm-prompt.md"); // dist/llm-prompt.md (installed package)
-  const sourcePromptPath = path.join(__dirname, "prompts", "llm-prompt.md"); // prompts/llm-prompt.md (source)
+  const rootPromptPath = path.join(__dirname, "..", "prompts", "llm-prompt.md"); // prompts/llm-prompt.md (project root)
+  const distPromptPath = path.join(__dirname, "prompts", "llm-prompt.md"); // dist/prompts/llm-prompt.md (compiled)
 
   let foundPath: string | null = null;
-  if (existsSync(distPromptPath)) {
+  if (existsSync(rootPromptPath)) {
+    foundPath = rootPromptPath;
+  } else if (existsSync(distPromptPath)) {
     foundPath = distPromptPath;
-  } else if (existsSync(sourcePromptPath)) {
-    foundPath = sourcePromptPath;
   }
 
   if (!foundPath) {
     console.error(chalk.red("Could not find llm-prompt.md file"));
+    console.error(chalk.gray(`Tried: ${rootPromptPath}`));
     console.error(chalk.gray(`Tried: ${distPromptPath}`));
-    console.error(chalk.gray(`Tried: ${sourcePromptPath}`));
     return;
   }
 
