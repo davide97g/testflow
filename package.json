@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "extract:jira": "bun run scripts/get-jira-issue.ts",
-    "extract:pr": "bun run scripts/get-pr-changes.ts"
+    "extract:pr": "bun run scripts/get-pr-changes.ts",
+    "init": "bun run src/init.ts"
   },
   "repository": {
     "type": "git",
@@ -32,7 +33,11 @@
     "chalk": "^5.6.2",
     "commander": "^12.1.0",
     "figlet": "^1.9.4",
+    "fs-extra": "^11.3.2",
     "gradient-string": "^3.0.0",
     "ora": "^9.0.0"
+  },
+  "bin": {
+    "testflow": "./src/cli.ts"
   }
 }
