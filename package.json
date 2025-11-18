@@ -30,13 +30,15 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^8.0.1",
+    "@types/fs-extra": "^11.0.4",
     "axios": "^1.13.2",
     "chalk": "^5.6.2",
     "commander": "^12.1.0",
     "figlet": "^1.9.4",
     "fs-extra": "^11.3.2",
     "gradient-string": "^3.0.0",
-    "ora": "^9.0.0"
+    "ora": "^9.0.0",
+    "zod": "^4.1.12"
   },
   "bin": {
     "testflow": "./src/cli.ts"

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { spawnSync } from "node:child_process";
 import fs from "fs-extra";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -45,4 +45,3 @@ program
   });
 
 program.parse(process.argv);
-

@@ -1,14 +1,9 @@
 import axios from "axios";
 import chalk from "chalk";
-import {
-  appendFileSync,
-  mkdirSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFileSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ora from "ora";
+import { loadConfigSync } from "../src/config.js";
 
 // Helper function to convert absolute path to relative path
 const getRelativePath = (absolutePath: string): string => {
@@ -18,15 +13,7 @@ const getRelativePath = (absolutePath: string): string => {
     : `/${relativePath.replace(/\\/g, "/")}`;
 };
 
-const config = JSON.parse(
-  readFileSync(join(process.cwd(), "config.json"), "utf8")
-) as {
-  bitbucket: {
-    workspace: string;
-    repo: string;
-  };
-};
-
+const config = loadConfigSync();
 const { workspace, repo } = config.bitbucket;
 
 const BITBUCKET_BASE_URL = "https://api.bitbucket.org/2.0";

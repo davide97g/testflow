@@ -1,16 +1,11 @@
 import { input, select } from "@inquirer/prompts";
 import axios from "axios";
 import chalk from "chalk";
-import {
-  appendFileSync,
-  mkdirSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFileSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ora from "ora";
-import { filterPatch, getPRChanges } from "./get-pr-changes";
+import { loadConfigSync } from "../src/config.js";
+import { filterPatch, getPRChanges } from "./get-pr-changes.js";
 
 // Helper function to convert absolute path to relative path
 const getRelativePath = (absolutePath: string): string => {
@@ -20,21 +15,7 @@ const getRelativePath = (absolutePath: string): string => {
     : `/${relativePath.replace(/\\/g, "/")}`;
 };
 
-const config = JSON.parse(
-  readFileSync(join(process.cwd(), "config.json"), "utf8")
-) as {
-  bitbucket: {
-    workspace: string;
-    repo: string;
-  };
-  jira: {
-    baseUrl: string;
-    boardId?: number;
-    assignee?: string;
-    statuses?: string[];
-  };
-};
-
+const config = loadConfigSync();
 const { workspace, repo } = config.bitbucket;
 const { baseUrl: jiraBaseUrl } = config.jira;
 
@@ -50,10 +31,7 @@ if (!JIRA_API_TOKEN) {
   process.exit(1);
 }
 
-if (!jiraBaseUrl) {
-  console.error(chalk.red("Error: jira.baseUrl is required in config.json"));
-  process.exit(1);
-}
+// jiraBaseUrl is validated by Zod schema, so it's guaranteed to exist
 
 if (!JIRA_EMAIL) {
   console.error(

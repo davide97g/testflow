@@ -8,25 +8,13 @@ import gradient from "gradient-string";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ora from "ora";
+import { type Config, loadConfig } from "./config.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const colors = ["#A4A5A7", "#C74600", "#EB640A", "#F2A65D"];
 const dynamicGradient = gradient(colors);
-
-interface Config {
-  bitbucket: {
-    workspace: string;
-    repo: string;
-  };
-  jira: {
-    baseUrl: string;
-    boardId?: number;
-    assignee?: string;
-    statuses?: string[];
-  };
-}
 
 interface InitAnswers {
   workspace: string;
@@ -91,19 +79,16 @@ const loadDefaults = async (): Promise<Partial<InitAnswers>> => {
   const defaults: Partial<InitAnswers> = {};
 
   // Try to read existing config.json
-  const configPath = path.join(process.cwd(), "config.json");
   try {
-    if (await fs.pathExists(configPath)) {
-      const existingConfig = (await fs.readJson(configPath)) as Config;
-      defaults.workspace = existingConfig.bitbucket?.workspace;
-      defaults.repo = existingConfig.bitbucket?.repo;
-      defaults.jiraBaseUrl = existingConfig.jira?.baseUrl;
-      defaults.boardId = existingConfig.jira?.boardId;
-      defaults.assignee = existingConfig.jira?.assignee;
-      defaults.statuses = existingConfig.jira?.statuses;
-    }
+    const existingConfig = await loadConfig();
+    defaults.workspace = existingConfig.bitbucket.workspace;
+    defaults.repo = existingConfig.bitbucket.repo;
+    defaults.jiraBaseUrl = existingConfig.jira.baseUrl;
+    defaults.boardId = existingConfig.jira.boardId;
+    defaults.assignee = existingConfig.jira.assignee;
+    defaults.statuses = existingConfig.jira.statuses;
   } catch (error) {
-    // Ignore errors reading config
+    // Ignore errors reading config (file might not exist yet)
   }
 
   // Try to read package.json for repo name
