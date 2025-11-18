@@ -1,5 +1,5 @@
 {
-  "name": "@testflow/cli",
+  "name": "@davide97g/testflow",
   "version": "0.2.0",
   "description": "Framework for testing and automation",
   "main": "./dist/index.js",
@@ -71,4 +71,3 @@
     "bun": ">=1.0.0"
   }
 }
-
