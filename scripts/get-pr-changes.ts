@@ -1,5 +1,5 @@
 import axios from "axios";
-import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const config = JSON.parse(
@@ -17,6 +17,33 @@ if (!BITBUCKET_EMAIL || !BITBUCKET_API_TOKEN) {
   );
   process.exit(1);
 }
+
+const logError = (error: unknown, context: string) => {
+  const logPath = join(process.cwd(), "testflow.log");
+  const timestamp = new Date().toISOString();
+  const errorDetails = {
+    timestamp,
+    context,
+    error: error instanceof Error ? {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    } : String(error),
+    axiosError: axios.isAxiosError(error) ? {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      config: {
+        url: error.config?.url,
+        method: error.config?.method,
+        headers: error.config?.headers,
+      },
+    } : undefined,
+  };
+  
+  const logEntry = `\n[${timestamp}] ${context}\n${JSON.stringify(errorDetails, null, 2)}\n`;
+  appendFileSync(logPath, logEntry, "utf-8");
+};
 
 interface PRChangesParams {
   workspace: string;
@@ -166,19 +193,12 @@ const extractTicketId = (prData: unknown): string | null => {
     // Return the first found ticket ID (most common case: one ticket per PR)
     if (foundTickets.size > 0) {
       const ticketId = Array.from(foundTickets)[0];
-      if (foundTickets.size > 1) {
-        console.warn(
-          `⚠️  Multiple ticket IDs found: ${Array.from(foundTickets).join(
-            ", "
-          )}. Using: ${ticketId}`
-        );
-      }
       return ticketId;
     }
 
     return null;
   } catch (error) {
-    console.warn("⚠️  Error extracting ticket ID from PR:", error);
+    logError(error, "Error extracting ticket ID from PR");
     return null;
   }
 };
@@ -202,7 +222,6 @@ export const getPRChanges = async ({
   // GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}
   // Reference: https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/#api-repositories-workspace-repo-slug-pullrequests-pull-request-id-get
   const prUrl = `${BITBUCKET_BASE_URL}/repositories/${workspace}/${repo}/pullrequests/${prId}`;
-  console.log("Fetching PR details...");
   const prResponse = await axios.get(prUrl, { headers });
 
   const changes: {
@@ -223,32 +242,22 @@ export const getPRChanges = async ({
   // GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/diffstat
   const diffstatUrl = `${BITBUCKET_BASE_URL}/repositories/${workspace}/${repo}/pullrequests/${prId}/diffstat`;
   try {
-    console.log("Fetching PR diffstat...");
     const diffstatResponse = await axios.get(diffstatUrl, { headers });
     changes.diffstat = diffstatResponse.data;
   } catch (error) {
+    logError(error, `Failed to fetch PR diffstat for PR ${prId}`);
+    if (!changes.errors) changes.errors = [];
     if (axios.isAxiosError(error) && error.response?.status === 403) {
       const errorData = error.response.data as {
         error?: { detail?: { required?: string[] } };
       };
       const requiredScopes = errorData.error?.detail?.required || [];
-      console.warn(
-        `⚠️  Could not fetch diffstat: Missing required scope(s): ${requiredScopes.join(
-          ", "
-        )}`
-      );
-      if (!changes.errors) changes.errors = [];
       changes.errors.push({
         endpoint: "diffstat",
         message: "Missing required scopes",
         requiredScopes,
       });
     } else {
-      console.warn(
-        "⚠️  Could not fetch diffstat:",
-        error instanceof Error ? error.message : "Unknown error"
-      );
-      if (!changes.errors) changes.errors = [];
       changes.errors.push({
         endpoint: "diffstat",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -260,7 +269,6 @@ export const getPRChanges = async ({
   // GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/diff
   const diffUrl = `${BITBUCKET_BASE_URL}/repositories/${workspace}/${repo}/pullrequests/${prId}/diff`;
   try {
-    console.log("Fetching PR diff...");
     const diffResponse = await axios.get(diffUrl, {
       headers: {
         Authorization: `Basic ${auth}`,
@@ -270,28 +278,19 @@ export const getPRChanges = async ({
     });
     changes.diff = diffResponse.data;
   } catch (error) {
+    logError(error, `Failed to fetch PR diff for PR ${prId}`);
+    if (!changes.errors) changes.errors = [];
     if (axios.isAxiosError(error) && error.response?.status === 403) {
       const errorData = error.response.data as {
         error?: { detail?: { required?: string[] } };
       };
       const requiredScopes = errorData.error?.detail?.required || [];
-      console.warn(
-        `⚠️  Could not fetch diff: Missing required scope(s): ${requiredScopes.join(
-          ", "
-        )}`
-      );
-      if (!changes.errors) changes.errors = [];
       changes.errors.push({
         endpoint: "diff",
         message: "Missing required scopes",
         requiredScopes,
       });
     } else {
-      console.warn(
-        "⚠️  Could not fetch diff:",
-        error instanceof Error ? error.message : "Unknown error"
-      );
-      if (!changes.errors) changes.errors = [];
       changes.errors.push({
         endpoint: "diff",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -304,7 +303,6 @@ export const getPRChanges = async ({
   // Reference: https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/#api-repositories-workspace-repo-slug-pullrequests-pull-request-id-patch-get
   const patchUrl = `${BITBUCKET_BASE_URL}/repositories/${workspace}/${repo}/pullrequests/${prId}/patch`;
   try {
-    console.log("Fetching PR patch...");
     const patchResponse = await axios.get(patchUrl, {
       headers: {
         Authorization: `Basic ${auth}`,
@@ -314,28 +312,19 @@ export const getPRChanges = async ({
     });
     changes.patch = patchResponse.data;
   } catch (error) {
+    logError(error, `Failed to fetch PR patch for PR ${prId}`);
+    if (!changes.errors) changes.errors = [];
     if (axios.isAxiosError(error) && error.response?.status === 403) {
       const errorData = error.response.data as {
         error?: { detail?: { required?: string[] } };
       };
       const requiredScopes = errorData.error?.detail?.required || [];
-      console.warn(
-        `⚠️  Could not fetch patch: Missing required scope(s): ${requiredScopes.join(
-          ", "
-        )}`
-      );
-      if (!changes.errors) changes.errors = [];
       changes.errors.push({
         endpoint: "patch",
         message: "Missing required scopes",
         requiredScopes,
       });
     } else {
-      console.warn(
-        "⚠️  Could not fetch patch:",
-        error instanceof Error ? error.message : "Unknown error"
-      );
-      if (!changes.errors) changes.errors = [];
       changes.errors.push({
         endpoint: "patch",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -348,8 +337,6 @@ export const getPRChanges = async ({
 
 const main = async () => {
   const prId = process.argv[2];
-  // Example usage - modify these values for testing
-  console.log(`Fetching PR changes for ${workspace}/${repo}#${prId}...`);
 
   try {
     const changes = await getPRChanges({ workspace, repo, prId });
@@ -359,12 +346,10 @@ const main = async () => {
 
     if (!ticketId) {
       console.error(
-        "❌ Could not extract ticket ID from PR. Please ensure the PR title, description, or branch name contains a Jira ticket ID (e.g., BAT-2076)."
+        "❌ Could not extract ticket ID from PR"
       );
       process.exit(1);
     }
-
-    console.log(`📋 Extracted ticket ID: ${ticketId}`);
 
     // Create output directory if it doesn't exist
     // Always output to a folder named with the ticket ID
@@ -393,28 +378,9 @@ const main = async () => {
       writeFileSync(patchPath, filteredPatch, "utf-8");
       console.log(`✅ PR patch saved to: ${patchPath}`);
     }
-
-    const prData = changes.pr as { title?: string; state?: string };
-    console.log(`📊 PR #${prId}: ${prData.title || "Untitled"}`);
-    console.log(`🔀 State: ${prData.state || "Unknown"}`);
-
-    if (changes.diffstat) {
-      const diffstatData = changes.diffstat as { values?: unknown[] };
-      console.log(`📁 Files changed: ${diffstatData.values?.length || 0}`);
-    } else {
-      console.log("📁 Files changed: N/A (diffstat not available)");
-    }
-
-    if (changes.errors && changes.errors.length > 0) {
-      console.log(
-        "\n⚠️  Note: Some data could not be fetched due to missing API token scopes."
-      );
-      console.log(
-        '   To get full PR changes, ensure your token has the "read:repository:bitbucket" scope.'
-      );
-    }
   } catch (error) {
-    console.error("Failed to fetch PR changes:", error);
+    logError(error, `Failed to fetch PR changes for PR ${prId}`);
+    console.error("❌ Failed to fetch PR changes");
     process.exit(1);
   }
 };

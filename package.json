@@ -5,8 +5,8 @@
   "main": "src/index.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "get-jira-issue": "bun run scripts/get-jira-issue.ts",
-    "get-pr-changes": "bun run scripts/get-pr-changes.ts"
+    "extract:jira": "bun run scripts/get-jira-issue.ts",
+    "extract:pr": "bun run scripts/get-pr-changes.ts"
   },
   "repository": {
     "type": "git",

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { filterPatch, getPRChanges } from "./get-pr-changes";
 
@@ -29,6 +29,33 @@ if (!JIRA_EMAIL) {
   );
   process.exit(1);
 }
+
+const logError = (error: unknown, context: string) => {
+  const logPath = join(process.cwd(), "testflow.log");
+  const timestamp = new Date().toISOString();
+  const errorDetails = {
+    timestamp,
+    context,
+    error: error instanceof Error ? {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    } : String(error),
+    axiosError: axios.isAxiosError(error) ? {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      config: {
+        url: error.config?.url,
+        method: error.config?.method,
+        headers: error.config?.headers,
+      },
+    } : undefined,
+  };
+  
+  const logEntry = `\n[${timestamp}] ${context}\n${JSON.stringify(errorDetails, null, 2)}\n`;
+  appendFileSync(logPath, logEntry, "utf-8");
+};
 
 interface JiraIssueParams {
   issueIdOrKey: string;
@@ -64,8 +91,6 @@ export const getJiraIssue = async ({ issueIdOrKey }: JiraIssueParams) => {
   // Try v3 API first
   // Include comments and rendered fields in the response
   let issueUrl = `${normalizedBaseUrl}/rest/api/3/issue/${issueIdOrKey}?expand=renderedFields`;
-  console.log(`Fetching Jira issue: ${issueIdOrKey}...`);
-  console.log(`Trying API v3: ${issueUrl}`);
 
   try {
     const issueResponse = await axios.get(issueUrl, { headers });
@@ -74,68 +99,43 @@ export const getJiraIssue = async ({ issueIdOrKey }: JiraIssueParams) => {
     if (axios.isAxiosError(error)) {
       // If v3 returns 404, try v2 as fallback
       if (error.response?.status === 404) {
-        console.log(`API v3 returned 404, trying API v2...`);
         issueUrl = `${normalizedBaseUrl}/rest/api/2/issue/${issueIdOrKey}?expand=renderedFields`;
-        console.log(`Trying API v2: ${issueUrl}`);
         try {
           const issueResponseV2 = await axios.get(issueUrl, { headers });
           issueData.issue = issueResponseV2.data;
         } catch (v2Error) {
+          logError(v2Error, `Failed to fetch Jira issue ${issueIdOrKey} (API v2)`);
           if (axios.isAxiosError(v2Error)) {
             if (v2Error.response?.status === 401) {
-              console.error(
-                "❌ Authentication failed. Please check your JIRA_EMAIL and JIRA_API_TOKEN."
-              );
-              console.error("Response:", v2Error.response.data);
+              console.error("❌ Authentication failed");
               process.exit(1);
             } else if (v2Error.response?.status === 404) {
-              console.error(
-                `❌ Issue ${issueIdOrKey} not found in both API v2 and v3.`
-              );
-              console.error("Response:", v2Error.response.data);
+              console.error(`❌ Issue ${issueIdOrKey} not found`);
               process.exit(1);
             } else if (v2Error.response?.status === 403) {
-              console.error(
-                "❌ Access forbidden. Check your permissions for this issue."
-              );
-              console.error("Response:", v2Error.response.data);
+              console.error("❌ Access forbidden");
               process.exit(1);
             }
           }
-          console.error(
-            "Failed to fetch issue with API v2:",
-            v2Error instanceof Error ? v2Error.message : "Unknown error"
-          );
+          console.error("❌ Failed to fetch issue");
           process.exit(1);
         }
       } else if (error.response?.status === 401) {
-        console.error(
-          "❌ Authentication failed. Please check your JIRA_EMAIL and JIRA_API_TOKEN."
-        );
-        console.error("Response:", error.response.data);
+        logError(error, `Authentication failed for Jira issue ${issueIdOrKey}`);
+        console.error("❌ Authentication failed");
         process.exit(1);
       } else if (error.response?.status === 403) {
-        console.error(
-          "❌ Access forbidden. Check your permissions for this issue."
-        );
-        console.error("Response:", error.response.data);
+        logError(error, `Access forbidden for Jira issue ${issueIdOrKey}`);
+        console.error("❌ Access forbidden");
         process.exit(1);
       } else {
-        console.error(
-          "Failed to fetch issue:",
-          error instanceof Error ? error.message : "Unknown error"
-        );
-        if (error.response) {
-          console.error("Status:", error.response.status);
-          console.error("Response:", error.response.data);
-        }
+        logError(error, `Failed to fetch Jira issue ${issueIdOrKey}`);
+        console.error("❌ Failed to fetch issue");
         process.exit(1);
       }
     } else {
-      console.error(
-        "Failed to fetch issue:",
-        error instanceof Error ? error.message : "Unknown error"
-      );
+      logError(error, `Failed to fetch Jira issue ${issueIdOrKey}`);
+      console.error("❌ Failed to fetch issue");
       process.exit(1);
     }
   }
@@ -145,28 +145,15 @@ export const getJiraIssue = async ({ issueIdOrKey }: JiraIssueParams) => {
   const apiVersion = issueUrl.includes("/rest/api/2/") ? "2" : "3";
   const changelogUrl = `${normalizedBaseUrl}/rest/api/${apiVersion}/issue/${issueIdOrKey}/changelog`;
   try {
-    console.log("Fetching issue changelog...");
     const changelogResponse = await axios.get(changelogUrl, { headers });
     issueData.changelog = changelogResponse.data;
   } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 403) {
-      console.warn("⚠️  Could not fetch changelog: Access forbidden");
-      if (!issueData.errors) issueData.errors = [];
-      issueData.errors.push({
-        endpoint: "changelog",
-        message: "Access forbidden",
-      });
-    } else {
-      console.warn(
-        "⚠️  Could not fetch changelog:",
-        error instanceof Error ? error.message : "Unknown error"
-      );
-      if (!issueData.errors) issueData.errors = [];
-      issueData.errors.push({
-        endpoint: "changelog",
-        message: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
+    logError(error, `Failed to fetch changelog for Jira issue ${issueIdOrKey}`);
+    if (!issueData.errors) issueData.errors = [];
+    issueData.errors.push({
+      endpoint: "changelog",
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
   }
 
   return issueData;
@@ -220,7 +207,6 @@ export const getBitbucketBranch = async ({
 
         if (issueId) {
           const devStatusUrl = `${normalizedBaseUrl}/rest/dev-status/1.0/issue/detail?issueId=${issueId}&applicationType=bitbucket&dataType=repository`;
-          console.log("Trying Jira Development Status API...");
           const devStatusResponse = await axios.get(devStatusUrl, { headers });
           const devStatus = devStatusResponse.data as {
             detail?: Array<{
@@ -244,9 +230,6 @@ export const getBitbucketBranch = async ({
               branchInfo.branchName = branch.name;
               branchInfo.branchUrl = branch.url;
               branchInfo.source = "jira_dev_status";
-              console.log(
-                `✅ Found branch via Jira Development Status API: ${branch.name}`
-              );
               return branchInfo;
             }
             // Get branch from PR source
@@ -257,9 +240,6 @@ export const getBitbucketBranch = async ({
                 branchInfo.prId = pr.id?.toString();
                 branchInfo.prUrl = pr.url;
                 branchInfo.source = "jira_dev_status";
-                console.log(
-                  `✅ Found branch via Jira Development Status API (from PR): ${pr.source.branch.name}`
-                );
                 return branchInfo;
               }
             }
@@ -268,15 +248,11 @@ export const getBitbucketBranch = async ({
       } catch (error) {
         // Dev status API might not be available or integrated, continue to fallback methods
         if (axios.isAxiosError(error) && error.response?.status !== 404) {
-          console.warn(
-            "⚠️  Jira Development Status API not available or not integrated"
-          );
+          logError(error, `Jira Development Status API error for issue ${issueIdOrKey}`);
         }
       }
-    } catch {
-      console.warn(
-        "⚠️  Could not fetch branch from Jira Development Status API"
-      );
+    } catch (error) {
+      logError(error, `Failed to fetch branch from Jira Development Status API for issue ${issueIdOrKey}`);
     }
   }
 
@@ -304,7 +280,6 @@ export const getBitbucketBranch = async ({
           // GET /repositories/{workspace}/{repo_slug}/pullrequests?state={state}
           // Reference: https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/#api-repositories-workspace-repo-slug-pullrequests-get
           const prsUrl = `${BITBUCKET_BASE_URL}/repositories/${workspace}/${repo}/pullrequests?state=${state}&pagelen=50`;
-          console.log(`Searching Bitbucket PRs (state: ${state})...`);
           const prsResponse = await axios.get(prsUrl, { headers });
           const prsData = prsResponse.data as {
             values?: Array<{
@@ -332,9 +307,6 @@ export const getBitbucketBranch = async ({
                 branchInfo.prId = pr.id?.toString();
                 branchInfo.prUrl = pr.links?.html?.href;
                 branchInfo.source = "bitbucket_pr";
-                console.log(
-                  `✅ Found branch via Bitbucket PR search: ${pr.source?.branch?.name}`
-                );
                 return branchInfo;
               }
             }
@@ -370,9 +342,6 @@ export const getBitbucketBranch = async ({
                     branchInfo.prId = pr.id?.toString();
                     branchInfo.prUrl = pr.links?.html?.href;
                     branchInfo.source = "bitbucket_pr";
-                    console.log(
-                      `✅ Found branch via Bitbucket PR search: ${pr.source?.branch?.name}`
-                    );
                     return branchInfo;
                   }
                 }
@@ -386,17 +355,12 @@ export const getBitbucketBranch = async ({
         } catch (error) {
           // Continue to next state or method
           if (axios.isAxiosError(error) && error.response?.status === 403) {
-            console.warn(
-              `⚠️  Access forbidden when searching PRs (state: ${state})`
-            );
+            logError(error, `Access forbidden when searching Bitbucket PRs (state: ${state}) for issue ${issueIdOrKey}`);
           }
         }
       }
     } catch (error) {
-      console.warn(
-        "⚠️  Could not search Bitbucket PRs:",
-        error instanceof Error ? error.message : "Unknown error"
-      );
+      logError(error, `Failed to search Bitbucket PRs for issue ${issueIdOrKey}`);
     }
 
     // Method 3: Search branches directly in Bitbucket
@@ -413,7 +377,6 @@ export const getBitbucketBranch = async ({
       // GET /repositories/{workspace}/{repo_slug}/refs/branches
       // Reference: https://developer.atlassian.com/cloud/bitbucket/rest/api-group-refs/#api-repositories-workspace-repo-slug-refs-branches-get
       const branchesUrl = `${BITBUCKET_BASE_URL}/repositories/${workspace}/${repo}/refs/branches?pagelen=100`;
-      console.log("Searching Bitbucket branches...");
       const branchesResponse = await axios.get(branchesUrl, { headers });
       const branchesData = branchesResponse.data as {
         values?: Array<{
@@ -434,9 +397,6 @@ export const getBitbucketBranch = async ({
             branchInfo.branchName = branch.name;
             branchInfo.branchUrl = branch.links?.html?.href;
             branchInfo.source = "bitbucket_branch";
-            console.log(
-              `✅ Found branch via direct branch search: ${branch.name}`
-            );
             return branchInfo;
           }
         }
@@ -461,9 +421,6 @@ export const getBitbucketBranch = async ({
                 branchInfo.branchName = branch.name;
                 branchInfo.branchUrl = branch.links?.html?.href;
                 branchInfo.source = "bitbucket_branch";
-                console.log(
-                  `✅ Found branch via direct branch search: ${branch.name}`
-                );
                 return branchInfo;
               }
             }
@@ -475,16 +432,10 @@ export const getBitbucketBranch = async ({
         }
       }
     } catch (error) {
-      console.warn(
-        "⚠️  Could not search Bitbucket branches:",
-        error instanceof Error ? error.message : "Unknown error"
-      );
+      logError(error, `Failed to search Bitbucket branches for issue ${issueIdOrKey}`);
     }
   }
 
-  console.warn(
-    `⚠️  Could not find branch associated with ticket ${issueIdOrKey}`
-  );
   return null;
 };
 
@@ -669,8 +620,6 @@ const main = async () => {
     process.exit(1);
   }
 
-  console.log(`Fetching Jira issue: ${issueIdOrKey}...`);
-
   try {
     const issueData = await getJiraIssue({ issueIdOrKey });
 
@@ -679,10 +628,7 @@ const main = async () => {
     try {
       branchInfo = await getBitbucketBranch({ issueIdOrKey });
     } catch (error) {
-      console.warn(
-        "⚠️  Could not fetch Bitbucket branch:",
-        error instanceof Error ? error.message : "Unknown error"
-      );
+      logError(error, `Failed to fetch Bitbucket branch for issue ${issueIdOrKey}`);
     }
 
     // Create output directory if it doesn't exist
@@ -719,7 +665,6 @@ const main = async () => {
       // If PR ID is found, fetch PR changes
       if (branchInfo.prId && workspace && repo) {
         try {
-          console.log(`\n🔗 Fetching PR changes for PR #${branchInfo.prId}...`);
           const prChanges = await getPRChanges({
             workspace,
             repo,
@@ -747,36 +692,9 @@ const main = async () => {
             writeFileSync(patchPath, filteredPatch, "utf-8");
             console.log(`✅ PR patch saved to: ${patchPath}`);
           }
-
-          // Display PR summary
-          const prData = prChanges.pr as { title?: string; state?: string };
-          console.log(
-            `\n📊 PR #${branchInfo.prId}: ${prData.title || "Untitled"}`
-          );
-          console.log(`🔀 State: ${prData.state || "Unknown"}`);
-
-          if (prChanges.diffstat) {
-            const diffstatData = prChanges.diffstat as { values?: unknown[] };
-            console.log(
-              `📁 Files changed: ${diffstatData.values?.length || 0}`
-            );
-          } else {
-            console.log("📁 Files changed: N/A (diffstat not available)");
-          }
-
-          if (prChanges.errors && prChanges.errors.length > 0) {
-            console.log(
-              "\n⚠️  Note: Some PR data could not be fetched due to missing API token scopes."
-            );
-            console.log(
-              '   To get full PR changes, ensure your token has the "read:repository:bitbucket" scope.'
-            );
-          }
         } catch (error) {
-          console.warn(
-            `⚠️  Could not fetch PR changes for PR #${branchInfo.prId}:`,
-            error instanceof Error ? error.message : "Unknown error"
-          );
+          logError(error, `Failed to fetch PR changes for PR #${branchInfo.prId}`);
+          console.error("❌ Failed to fetch PR changes");
         }
       }
     }
@@ -787,96 +705,14 @@ const main = async () => {
     writeFileSync(compactPath, compactIssue, "utf-8");
     console.log(`✅ Compact issue data saved to: ${compactPath}`);
 
-    // Display summary information
-    const issue = issueData.issue as {
-      key?: string;
-      fields?: {
-        summary?: string;
-        status?: { name?: string };
-        assignee?: { displayName?: string; emailAddress?: string } | null;
-        reporter?: { displayName?: string; emailAddress?: string };
-        created?: string;
-        updated?: string;
-        issuetype?: { name?: string };
-        priority?: { name?: string };
-      };
-    };
-
-    if (issue) {
-      console.log(`\n📊 Issue: ${issue.key || issueIdOrKey}`);
-      console.log(`📝 Summary: ${issue.fields?.summary || "N/A"}`);
-      console.log(`📋 Type: ${issue.fields?.issuetype?.name || "N/A"}`);
-      console.log(`📌 Status: ${issue.fields?.status?.name || "N/A"}`);
-      console.log(`⚡ Priority: ${issue.fields?.priority?.name || "N/A"}`);
-      console.log(
-        `👤 Assignee: ${
-          issue.fields?.assignee?.displayName ||
-          issue.fields?.assignee?.emailAddress ||
-          "Unassigned"
-        }`
-      );
-      console.log(
-        `👥 Reporter: ${
-          issue.fields?.reporter?.displayName ||
-          issue.fields?.reporter?.emailAddress ||
-          "N/A"
-        }`
-      );
-      if (issue.fields?.created) {
-        console.log(
-          `📅 Created: ${new Date(issue.fields.created).toLocaleString()}`
-        );
-      }
-      if (issue.fields?.updated) {
-        console.log(
-          `🔄 Updated: ${new Date(issue.fields.updated).toLocaleString()}`
-        );
-      }
-    }
-
-    if (issueData.changelog) {
-      const changelogData = issueData.changelog as { total?: number };
-      console.log(`\n📜 Changelog entries: ${changelogData.total || 0}`);
-    } else {
-      console.log("\n📜 Changelog: N/A (not available)");
-    }
-
-    if (issueData.errors && issueData.errors.length > 0) {
-      console.log("\n⚠️  Note: Some data could not be fetched.");
-    }
-
-    // Display branch information
     if (branchInfo) {
-      console.log("\n🌿 Bitbucket Branch Information:");
-      console.log(`   Branch: ${branchInfo.branchName || "N/A"}`);
-      if (branchInfo.prId) {
-        console.log(`   PR ID: ${branchInfo.prId}`);
-      }
-      if (branchInfo.branchUrl) {
-        console.log(`   Branch URL: ${branchInfo.branchUrl}`);
-      }
-      if (branchInfo.prUrl) {
-        console.log(`   PR URL: ${branchInfo.prUrl}`);
-      }
-      console.log(`   Source: ${branchInfo.source || "N/A"}`);
-    } else {
-      console.log("\n🌿 Bitbucket Branch: Not found");
-      if (!workspace || !repo) {
-        console.log(
-          "   Note: workspace and repo must be configured in config.json"
-        );
-      }
-      if (!BITBUCKET_EMAIL || !BITBUCKET_API_TOKEN) {
-        console.log(
-          "   Note: BITBUCKET_EMAIL and BITBUCKET_API_TOKEN environment variables are required"
-        );
-      }
+      console.log(`✅ Branch found: ${branchInfo.branchName || "N/A"}`);
     }
   } catch (error) {
-    console.error("Failed to fetch Jira issue:", error);
+    logError(error, `Failed to fetch Jira issue ${issueIdOrKey}`);
+    console.error("❌ Failed to fetch Jira issue");
     process.exit(1);
   }
 };
 
-main();
 main();
