@@ -10,7 +10,7 @@ const Docs = () => {
         <div className="mb-12">
           <h1 className="text-4xl font-bold mb-4">Documentation</h1>
           <p className="text-lg text-muted-foreground">
-            Complete reference for all Sonarflow commands and features
+            Complete reference for all testflow commands and features
           </p>
         </div>
 
@@ -25,76 +25,80 @@ const Docs = () => {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <code className="text-lg font-mono">fetch</code>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-muted-foreground">
-                  Fetches SonarQube issues from your pull requests on GitHub or Bitbucket.
-                </p>
-                <CodeBlock code="npx @bitrockteam/sonarflow fetch" />
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Options:</p>
-                  <CodeBlock
-                    code={`--platform   Platform to use (github or bitbucket)
---pr         Pull request number
---repo       Repository name
---owner      Repository owner`}
-                    language="text"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <code className="text-lg font-mono">scan</code>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-muted-foreground">
-                  Runs a local SonarQube scan on your codebase without requiring a SonarQube server.
-                </p>
-                <CodeBlock code="npx @bitrockteam/sonarflow scan" />
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Options:</p>
-                  <CodeBlock
-                    code={`--project    Project key for SonarQube
---sources    Source directories to scan
---exclusions File patterns to exclude`}
-                    language="text"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
                   <code className="text-lg font-mono">init</code>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-muted-foreground">
-                  Interactive CLI wizard to set up Sonarflow configuration and environment
-                  variables.
+                  Interactive CLI wizard to set up testflow configuration. Configures Bitbucket, Jira, and Confluence integrations, and creates AI editor rule files.
                 </p>
-                <CodeBlock code="npx @bitrockteam/sonarflow init" />
+                <CodeBlock code="testflow init" />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">What it does:</p>
+                  <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1 ml-2">
+                    <li>Configures Bitbucket integration (optional)</li>
+                    <li>Configures Jira integration (required)</li>
+                    <li>Configures Confluence integration (optional)</li>
+                    <li>Creates configuration files in .testflow/</li>
+                    <li>Sets up AI editor rules (Cursor, GitHub Copilot, Codeium)</li>
+                  </ul>
+                </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <code className="text-lg font-mono">update</code>
+                  <code className="text-lg font-mono">extract</code>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-muted-foreground">
-                  Checks for and installs the latest version of Sonarflow.
+                  Extract Jira issue data, linked resources, and PR changes. Can be used interactively or with a specific issue key.
                 </p>
-                <CodeBlock code="npx @bitrockteam/sonarflow update" />
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm font-medium mb-2">Interactive mode:</p>
+                    <CodeBlock code="testflow extract" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium mb-2">With specific issue:</p>
+                    <CodeBlock code="testflow extract BAT-123" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">What it does:</p>
+                  <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1 ml-2">
+                    <li>Fetches Jira issue details</li>
+                    <li>Extracts linked resources (other Jira issues and Confluence pages)</li>
+                    <li>Fetches Confluence page content (if configured)</li>
+                    <li>Searches for associated Bitbucket branches and PRs (if configured)</li>
+                    <li>Downloads PR changes and patches (if PR is found)</li>
+                    <li>Saves all data to .testflow/output/{`{ISSUE-KEY}`}/</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <code className="text-lg font-mono">extract:pr</code>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-muted-foreground">
+                  Extract PR changes directly by PR ID.
+                </p>
+                <CodeBlock code="testflow extract:pr 123" />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Arguments:</p>
+                  <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1 ml-2">
+                    <li>
+                      <code className="px-1 py-0.5 bg-muted rounded">prId</code> - Pull request ID (required)
+                    </li>
+                  </ul>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -103,29 +107,26 @@ const Docs = () => {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  <code className="text-lg font-mono">.sonar/issues.json</code>
+                  <code className="text-lg font-mono">.testflow/output/{`{ISSUE-KEY}`}/</code>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-muted-foreground">
-                  Contains all SonarQube issues fetched from pull requests. Each issue includes:
+                  The output directory structure contains all extracted data:
                 </p>
                 <CodeBlock
-                  code={`{
-  "issues": [
-    {
-      "key": "issue-key",
-      "rule": "rule-identifier",
-      "severity": "MAJOR",
-      "message": "Issue description",
-      "component": "file-path",
-      "line": 42,
-      "status": "OPEN",
-      "type": "BUG"
-    }
-  ]
-}`}
-                  language="json"
+                  code={`.testflow/output/{ISSUE-KEY}/
+├── jira-issue-description.txt    # Human-readable issue summary
+├── pr.patch                       # PR code changes (if PR found)
+├── raw/
+│   ├── jira-issue.json           # Full Jira issue data
+│   ├── linked-resources.json     # List of linked resources
+│   ├── bitbucket-branch.json     # Branch info (if found)
+│   └── bitbucket-pullrequests.json # PR data (if found)
+└── confluence/                    # Confluence pages (if found)
+    ├── page-{ID}.json
+    └── page-{ID}.txt`}
+                  language="text"
                 />
               </CardContent>
             </Card>
@@ -133,28 +134,52 @@ const Docs = () => {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  <code className="text-lg font-mono">.sonar/scanner-report.json</code>
+                  <code className="text-lg font-mono">jira-issue-description.txt</code>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-muted-foreground">
-                  Generated by the local scan command. Contains detailed analysis results:
+                  Human-readable summary of the Jira issue, formatted for easy consumption by AI editors.
                 </p>
-                <CodeBlock
-                  code={`{
-  "projectKey": "your-project",
-  "timestamp": "2025-01-01T12:00:00Z",
-  "issues": [...],
-  "metrics": {
-    "lines": 1000,
-    "coverage": "85.5%",
-    "bugs": 2,
-    "vulnerabilities": 0,
-    "code_smells": 15
-  }
-}`}
-                  language="json"
-                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <code className="text-lg font-mono">raw/jira-issue.json</code>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-muted-foreground">
+                  Complete Jira issue data in JSON format, including all fields, custom fields, and metadata.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <code className="text-lg font-mono">raw/linked-resources.json</code>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-muted-foreground">
+                  List of all linked Jira issues and Confluence pages associated with the main issue.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <code className="text-lg font-mono">pr.patch</code>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-muted-foreground">
+                  Git patch file containing all code changes from the associated pull request (if found).
+                </p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -166,40 +191,29 @@ const Docs = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-muted-foreground">
-                  Sonarflow seamlessly integrates with AI-powered editors to provide intelligent
-                  code insights.
+                  testflow seamlessly integrates with AI-powered editors to provide intelligent
+                  context about Jira issues and PR changes.
                 </p>
 
                 <div className="space-y-6 mt-6">
                   <div>
                     <h3 className="text-lg font-semibold mb-3">Cursor</h3>
                     <p className="text-muted-foreground mb-3">
-                      Configure Cursor to read SonarQube issues:
+                      The init command automatically creates a <code className="px-1 py-0.5 bg-muted rounded">.cursorrules</code> file with testflow instructions. AI assistants can read the extracted data from <code className="px-1 py-0.5 bg-muted rounded">.testflow/output/</code> directories.
                     </p>
-                    <CodeBlock
-                      code={`// Add to Cursor settings
-{
-  "sonarflow.enabled": true,
-  "sonarflow.issuesPath": ".sonar/issues.json"
-}`}
-                      language="json"
-                    />
                   </div>
 
                   <div>
-                    <h3 className="text-lg font-semibold mb-3">VSCode</h3>
+                    <h3 className="text-lg font-semibold mb-3">GitHub Copilot</h3>
                     <p className="text-muted-foreground mb-3">
-                      Use the Sonarflow extension for VSCode:
+                      The init command creates a <code className="px-1 py-0.5 bg-muted rounded">.github/copilot-instructions.md</code> file. GitHub Copilot can reference the extracted issue data for better context.
                     </p>
-                    <CodeBlock code="code --install-extension bitrockteam.sonarflow" />
                   </div>
 
                   <div>
-                    <h3 className="text-lg font-semibold mb-3">Windsurf</h3>
+                    <h3 className="text-lg font-semibold mb-3">Codeium</h3>
                     <p className="text-muted-foreground mb-3">
-                      Windsurf automatically detects{" "}
-                      <code className="px-1 py-0.5 bg-muted rounded">.sonar</code> directories and
-                      provides inline suggestions.
+                      The init command creates a <code className="px-1 py-0.5 bg-muted rounded">.codeium/instructions.md</code> file. Codeium can access the structured output in <code className="px-1 py-0.5 bg-muted rounded">.testflow/output/</code>.
                     </p>
                   </div>
                 </div>
@@ -217,22 +231,32 @@ const Docs = () => {
                 <ul className="space-y-2 text-muted-foreground">
                   <li>
                     <a
-                      href="https://docs.sonarqube.org/latest/"
+                      href="https://github.com/davide97g/testflow"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="hover:text-foreground underline"
                     >
-                      Official SonarQube Documentation
+                      testflow GitHub Repository
                     </a>
                   </li>
                   <li>
                     <a
-                      href="https://docs.sonarqube.org/latest/extend/web-api/"
+                      href="https://developer.atlassian.com/cloud/jira/platform/rest/v3/"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="hover:text-foreground underline"
                     >
-                      SonarQube Web API Reference
+                      Jira REST API Documentation
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://developer.atlassian.com/cloud/bitbucket/rest/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-foreground underline"
+                    >
+                      Bitbucket REST API Documentation
                     </a>
                   </li>
                 </ul>

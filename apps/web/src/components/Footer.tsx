@@ -10,11 +10,11 @@ const Footer = () => {
             <div className="flex items-center space-x-2">
               <img
                 src="/logo.svg"
-                alt="Sonarflow"
+                alt="Testflow"
                 className="h-8 w-8"
-                aria-label="Sonarflow logo"
+                aria-label="Testflow logo"
               />
-              <span className="text-xl font-bold">Sonarflow</span>
+              <span className="text-xl font-bold">Testflow</span>
             </div>
             <p className="text-sm text-muted-foreground">
               Automate SonarQube Issue Management with AI Integration
@@ -25,17 +25,26 @@ const Footer = () => {
             <h3 className="mb-3 text-sm font-semibold">Documentation</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
-                <Link to="/get-started" className="hover:text-foreground transition-colors">
+                <Link
+                  to="/get-started"
+                  className="hover:text-foreground transition-colors"
+                >
                   Get Started
                 </Link>
               </li>
               <li>
-                <Link to="/docs" className="hover:text-foreground transition-colors">
+                <Link
+                  to="/docs"
+                  className="hover:text-foreground transition-colors"
+                >
                   Documentation
                 </Link>
               </li>
               <li>
-                <Link to="/faq" className="hover:text-foreground transition-colors">
+                <Link
+                  to="/faq"
+                  className="hover:text-foreground transition-colors"
+                >
                   FAQ
                 </Link>
               </li>
@@ -46,13 +55,16 @@ const Footer = () => {
             <h3 className="mb-3 text-sm font-semibold">Community</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
-                <Link to="/contribute" className="hover:text-foreground transition-colors">
+                <Link
+                  to="/contribute"
+                  className="hover:text-foreground transition-colors"
+                >
                   Contribute
                 </Link>
               </li>
               <li>
                 <a
-                  href="https://github.com/bitrockteam/sonarflow"
+                  href="https://github.com/davide97g/testflow"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-foreground transition-colors flex items-center gap-1"
@@ -62,7 +74,10 @@ const Footer = () => {
                 </a>
               </li>
               <li>
-                <Link to="/contact" className="hover:text-foreground transition-colors">
+                <Link
+                  to="/contact"
+                  className="hover:text-foreground transition-colors"
+                >
                   Contact
                 </Link>
               </li>
@@ -85,7 +100,7 @@ const Footer = () => {
         </div>
 
         <div className="mt-8 border-t border-border/40 pt-8 text-center text-sm text-muted-foreground">
-          <p>© 2025 Sonarflow. Built by BitRock Team.</p>
+          <p>© 2025 Testflow. Built by BitRock Team.</p>
         </div>
       </div>
     </footer>

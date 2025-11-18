@@ -15,10 +15,14 @@ const FAQ = () => {
         <div className="space-y-3">
           <p>
             You need a GitHub personal access token with the{" "}
-            <code className="px-1 py-0.5 bg-muted rounded">read:packages</code> scope. Create one at
-            GitHub Settings → Developer settings → Personal access tokens.
+            <code className="px-1 py-0.5 bg-muted rounded">read:packages</code>{" "}
+            scope. Create one at GitHub Settings → Developer settings → Personal
+            access tokens.
           </p>
-          <CodeBlock code="npm login --registry=https://npm.pkg.github.com --scope=@bitrockteam" />
+          <CodeBlock
+            code={`echo "@davide97g:registry=https://npm.pkg.github.com" >> ~/.npmrc
+echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN" >> ~/.npmrc`}
+          />
         </div>
       ),
     },
@@ -34,7 +38,7 @@ const FAQ = () => {
           </ul>
           <p>Verify your .npmrc file contains:</p>
           <CodeBlock
-            code={`@bitrockteam:registry=https://npm.pkg.github.com
+            code={`@davide97g:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=YOUR_TOKEN`}
             language="text"
           />
@@ -42,61 +46,82 @@ const FAQ = () => {
       ),
     },
     {
-      question: "How do I configure Bitbucket integration?",
+      question: "How do I configure Jira integration?",
       answer: (
         <div className="space-y-3">
-          <p>Set up your environment variables with Bitbucket credentials:</p>
+          <p>
+            Jira integration is required. Set up your environment variables:
+          </p>
           <CodeBlock
-            code={`BITBUCKET_USERNAME=your_username
-BITBUCKET_APP_PASSWORD=your_app_password`}
+            code={`JIRA_EMAIL=your-email@example.com
+JIRA_API_TOKEN=your_jira_api_token`}
             language="bash"
           />
           <p>
-            Create an app password at Bitbucket Settings → Personal settings → App passwords with PR
-            read permissions.
+            Create an API token at Atlassian Account Settings → Security → API
+            tokens. You'll also need to configure the Jira base URL during{" "}
+            <code className="px-1 py-0.5 bg-muted rounded">testflow init</code>.
           </p>
         </div>
       ),
     },
     {
-      question: "What SonarQube versions are supported?",
+      question: "How do I configure Bitbucket integration?",
       answer: (
         <div className="space-y-3">
           <p>
-            Sonarflow works with SonarQube 7.9+ and SonarCloud. Both Community and Enterprise
-            editions are supported.
+            Bitbucket integration is optional. Set up your environment
+            variables:
+          </p>
+          <CodeBlock
+            code={`BITBUCKET_EMAIL=your-email@example.com
+BITBUCKET_API_TOKEN=your_bitbucket_api_token`}
+            language="bash"
+          />
+          <p>
+            Create an app password at Bitbucket Settings → Personal settings →
+            App passwords with PR read permissions. Configure workspace and
+            repository during{" "}
+            <code className="px-1 py-0.5 bg-muted rounded">testflow init</code>.
           </p>
         </div>
       ),
     },
     {
-      question: "Can I run scans without a SonarQube server?",
+      question: "Where are the extracted files stored?",
       answer: (
         <div className="space-y-3">
           <p>
-            Yes! The <code className="px-1 py-0.5 bg-muted rounded">scan</code> command runs
-            SonarScanner locally without requiring a SonarQube server instance.
-          </p>
-          <CodeBlock code="npx @bitrockteam/sonarflow scan" />
-        </div>
-      ),
-    },
-    {
-      question: "Where are the issue reports stored?",
-      answer: (
-        <div className="space-y-3">
-          <p>
-            Reports are stored in the <code className="px-1 py-0.5 bg-muted rounded">.sonar</code>{" "}
+            All extracted data is stored in the{" "}
+            <code className="px-1 py-0.5 bg-muted rounded">
+              .testflow/output/
+            </code>{" "}
             directory:
           </p>
           <ul className="list-disc list-inside space-y-1 ml-4">
             <li>
-              <code className="px-1 py-0.5 bg-muted rounded">.sonar/issues.json</code> - Fetched PR
-              issues
+              <code className="px-1 py-0.5 bg-muted rounded">
+                .testflow/output/{`{ISSUE-KEY}`}/jira-issue-description.txt
+              </code>{" "}
+              - Human-readable summary
             </li>
             <li>
-              <code className="px-1 py-0.5 bg-muted rounded">.sonar/scanner-report.json</code> -
-              Local scan results
+              <code className="px-1 py-0.5 bg-muted rounded">
+                .testflow/output/{`{ISSUE-KEY}`}/raw/jira-issue.json
+              </code>{" "}
+              - Full Jira issue data
+            </li>
+            <li>
+              <code className="px-1 py-0.5 bg-muted rounded">
+                .testflow/output/{`{ISSUE-KEY}`}/pr.patch
+              </code>{" "}
+              - PR code changes (if found)
+            </li>
+            <li>
+              <code className="px-1 py-0.5 bg-muted rounded">
+                .testflow/output/{`{ISSUE-KEY}`}/confluence/
+              </code>{" "}
+              - Confluence pages (if found)
             </li>
           </ul>
         </div>
@@ -106,20 +131,39 @@ BITBUCKET_APP_PASSWORD=your_app_password`}
       question: "How do I integrate with my AI editor?",
       answer: (
         <div className="space-y-3">
-          <p>Sonarflow automatically generates JSON reports that AI editors can read:</p>
+          <p>
+            The{" "}
+            <code className="px-1 py-0.5 bg-muted rounded">testflow init</code>{" "}
+            command automatically creates editor rule files:
+          </p>
           <ul className="list-disc list-inside space-y-1 ml-4">
             <li>
-              <strong>Cursor:</strong> Configure settings to read{" "}
-              <code className="px-1 py-0.5 bg-muted rounded">.sonar/issues.json</code>
+              <strong>Cursor:</strong> Creates{" "}
+              <code className="px-1 py-0.5 bg-muted rounded">.cursorrules</code>{" "}
+              file
             </li>
             <li>
-              <strong>VSCode:</strong> Install the Sonarflow extension
+              <strong>GitHub Copilot:</strong> Creates{" "}
+              <code className="px-1 py-0.5 bg-muted rounded">
+                .github/copilot-instructions.md
+              </code>{" "}
+              file
             </li>
             <li>
-              <strong>Windsurf:</strong> Automatically detects{" "}
-              <code className="px-1 py-0.5 bg-muted rounded">.sonar</code> directories
+              <strong>Codeium:</strong> Creates{" "}
+              <code className="px-1 py-0.5 bg-muted rounded">
+                .codeium/instructions.md
+              </code>{" "}
+              file
             </li>
           </ul>
+          <p>
+            AI editors can then read the extracted data from{" "}
+            <code className="px-1 py-0.5 bg-muted rounded">
+              .testflow/output/
+            </code>{" "}
+            directories.
+          </p>
         </div>
       ),
     },
@@ -130,27 +174,46 @@ BITBUCKET_APP_PASSWORD=your_app_password`}
           <p>Check your access tokens have the correct permissions:</p>
           <ul className="list-disc list-inside space-y-1 ml-4">
             <li>
-              <strong>GitHub:</strong> <code className="px-1 py-0.5 bg-muted rounded">repo</code>{" "}
-              and <code className="px-1 py-0.5 bg-muted rounded">read:packages</code>
+              <strong>Jira:</strong> API token with read permissions for issues
+              and projects
             </li>
             <li>
-              <strong>Bitbucket:</strong> PR read permissions
+              <strong>Bitbucket:</strong> App password with repository read and
+              PR read permissions
             </li>
             <li>
-              <strong>SonarQube:</strong> Project analysis permissions
+              <strong>Confluence:</strong> API token with read permissions (can
+              use same as Jira if same domain)
             </li>
           </ul>
         </div>
       ),
     },
     {
-      question: "How do I update to the latest version?",
+      question: "Can I extract a specific Jira issue?",
       answer: (
         <div className="space-y-3">
-          <p>Use the update command to check and install the latest version:</p>
-          <CodeBlock code="npx @bitrockteam/sonarflow update" />
-          <p>Or reinstall manually:</p>
-          <CodeBlock code="npm install -g @bitrockteam/sonarflow@latest" />
+          <p>Yes! You can extract a specific issue by providing its key:</p>
+          <CodeBlock code="testflow extract BAT-123" />
+          <p>
+            Or run{" "}
+            <code className="px-1 py-0.5 bg-muted rounded">
+              testflow extract
+            </code>{" "}
+            without arguments for interactive mode.
+          </p>
+        </div>
+      ),
+    },
+    {
+      question: "Can I extract PR changes without a Jira issue?",
+      answer: (
+        <div className="space-y-3">
+          <p>Yes! You can extract PR changes directly using the PR ID:</p>
+          <CodeBlock code="testflow extract:pr 123" />
+          <p>
+            This will download the PR patch file without requiring a Jira issue.
+          </p>
         </div>
       ),
     },
@@ -158,12 +221,11 @@ BITBUCKET_APP_PASSWORD=your_app_password`}
       question: "Can I use this in CI/CD pipelines?",
       answer: (
         <div className="space-y-3">
-          <p>Yes! Sonarflow is perfect for CI/CD. Add it to your pipeline:</p>
+          <p>Yes! testflow is perfect for CI/CD. Add it to your pipeline:</p>
           <CodeBlock
-            code={`- name: Run Sonarflow
-  run: |
-    npx @bitrockteam/sonarflow fetch
-    npx @bitrockteam/sonarflow scan`}
+            code={
+              "- name: Extract Jira Issue\n  run: |\n    testflow extract ${{ env.JIRA_ISSUE_KEY }}"
+            }
             language="yaml"
           />
         </div>
@@ -175,9 +237,11 @@ BITBUCKET_APP_PASSWORD=your_app_password`}
     <div className="min-h-screen py-12">
       <div className="container px-4 md:px-8 max-w-4xl">
         <div className="mb-12 text-center">
-          <h1 className="text-4xl font-bold mb-4">Frequently Asked Questions</h1>
+          <h1 className="text-4xl font-bold mb-4">
+            Frequently Asked Questions
+          </h1>
           <p className="text-lg text-muted-foreground">
-            Find answers to common questions about Sonarflow
+            Find answers to common questions about testflow
           </p>
         </div>
 
@@ -186,7 +250,9 @@ BITBUCKET_APP_PASSWORD=your_app_password`}
             <Accordion type="single" collapsible className="w-full">
               {faqs.map((faq, index) => (
                 <AccordionItem key={index} value={`item-${index}`}>
-                  <AccordionTrigger className="text-left">{faq.question}</AccordionTrigger>
+                  <AccordionTrigger className="text-left">
+                    {faq.question}
+                  </AccordionTrigger>
                   <AccordionContent className="text-muted-foreground">
                     {faq.answer}
                   </AccordionContent>
@@ -198,13 +264,15 @@ BITBUCKET_APP_PASSWORD=your_app_password`}
 
         <Card className="mt-8 bg-gradient-to-br from-primary/10 to-accent/10 border-primary/20">
           <CardContent className="pt-6">
-            <h3 className="text-xl font-semibold mb-2">Still have questions?</h3>
+            <h3 className="text-xl font-semibold mb-2">
+              Still have questions?
+            </h3>
             <p className="text-muted-foreground mb-4">
-              Can't find what you're looking for? Open an issue on GitHub or reach out to the
-              community.
+              Can't find what you're looking for? Open an issue on GitHub or
+              reach out to the community.
             </p>
             <a
-              href="https://github.com/bitrockteam/sonarflow/issues"
+              href="https://github.com/davide97g/testflow/issues"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline font-medium"

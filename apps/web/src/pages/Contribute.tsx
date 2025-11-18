@@ -10,11 +10,11 @@ const Contribute = () => {
         <div className="mb-12 text-center">
           <h1 className="text-4xl font-bold mb-4">Contribute</h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Help make Sonarflow better! We welcome contributions from the community
+            Help make testflow better! We welcome contributions from the community
           </p>
           <div className="mt-8">
             <a
-              href="https://github.com/bitrockteam/sonarflow"
+              href="https://github.com/davide97g/testflow"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -45,7 +45,7 @@ const Contribute = () => {
                 <li>Add relevant logs or screenshots</li>
               </ul>
               <a
-                href="https://github.com/bitrockteam/sonarflow/issues/new"
+                href="https://github.com/davide97g/testflow/issues/new"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -70,8 +70,8 @@ const Contribute = () => {
                 <div>
                   <p className="font-medium mb-2">1. Fork and Clone</p>
                   <CodeBlock
-                    code={`git clone https://github.com/YOUR_USERNAME/sonarflow.git
-cd sonarflow`}
+                    code={`git clone https://github.com/YOUR_USERNAME/testflow.git
+cd testflow`}
                   />
                 </div>
                 <div>
@@ -90,7 +90,7 @@ cd sonarflow`}
                 </div>
                 <div>
                   <p className="font-medium mb-2">5. Test Locally</p>
-                  <CodeBlock code="npm test && npx sonarflow" />
+                  <CodeBlock code="bun test && testflow --help" />
                 </div>
                 <div>
                   <p className="font-medium mb-2">6. Submit Your PR</p>
@@ -174,16 +174,16 @@ git push origin feature/your-feature-name`}
               <p className="text-muted-foreground">Test your changes locally before submitting:</p>
               <CodeBlock
                 code={`# Install dependencies
-npm install
+bun install
 
 # Run tests
-npm test
+bun test
 
 # Test the CLI
-npx sonarflow --help
-npx sonarflow init
-npx sonarflow fetch
-npx sonarflow scan`}
+testflow --help
+testflow init
+testflow extract
+testflow extract:pr 123`}
               />
             </CardContent>
           </Card>
