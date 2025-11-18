@@ -33,7 +33,7 @@ export type Config = z.infer<typeof configSchema>;
  * @throws Error if config file doesn't exist or validation fails
  */
 export const loadConfig = async (configPath?: string): Promise<Config> => {
-  const configFilePath = configPath || path.join(process.cwd(), "config.json");
+  const configFilePath = configPath || path.join(process.cwd(), ".testflow", "config.json");
 
   if (!existsSync(configFilePath)) {
     throw new Error(
@@ -65,7 +65,7 @@ export const loadConfig = async (configPath?: string): Promise<Config> => {
  * @throws Error if config file doesn't exist or validation fails
  */
 export const loadConfigSync = (configPath?: string): Config => {
-  const configFilePath = configPath || path.join(process.cwd(), "config.json");
+  const configFilePath = configPath || path.join(process.cwd(), ".testflow", "config.json");
 
   try {
     const configData = JSON.parse(readFileSync(configFilePath, "utf8"));

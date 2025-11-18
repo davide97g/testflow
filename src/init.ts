@@ -255,7 +255,11 @@ const writeConfig = async (answers: InitAnswers): Promise<void> => {
   }).start();
 
   try {
-    const configPath = path.join(process.cwd(), "config.json");
+    // Create .testflow directory if it doesn't exist
+    const testflowDir = path.join(process.cwd(), ".testflow");
+    mkdirSync(testflowDir, { recursive: true });
+
+    const configPath = path.join(testflowDir, "config.json");
     const config: Config = {
       bitbucket: {
         workspace: answers.workspace,
@@ -314,6 +318,41 @@ const getEditorConfig = (
         filePath: cwd,
         fileName: "testflow.mdc",
       };
+  }
+};
+
+const updateGitignore = async (): Promise<void> => {
+  const gitignorePath = path.join(process.cwd(), ".gitignore");
+  const testflowEntry = ".testflow/";
+
+  try {
+    let gitignoreContent = "";
+    if (existsSync(gitignorePath)) {
+      gitignoreContent = readFileSync(gitignorePath, "utf-8");
+    }
+
+    // Check if .testflow/ is already in .gitignore
+    if (gitignoreContent.includes(testflowEntry)) {
+      return; // Already exists, no need to add
+    }
+
+    // Remove old entries if they exist
+    gitignoreContent = gitignoreContent
+      .replace(/^output\/\s*$/gm, "")
+      .replace(/^config\.json\s*$/gm, "")
+      .replace(/^\*\.log\s*$/gm, "");
+
+    // Add .testflow/ entry
+    if (gitignoreContent && !gitignoreContent.endsWith("\n")) {
+      gitignoreContent += "\n";
+    }
+    gitignoreContent += `# testflow\n${testflowEntry}\n`;
+
+    writeFileSync(gitignorePath, gitignoreContent, "utf-8");
+    console.log(chalk.gray(`Updated .gitignore to include ${testflowEntry}`));
+  } catch (error) {
+    // Silently fail if .gitignore doesn't exist or can't be written
+    // This is not critical for the init process
   }
 };
 
@@ -428,10 +467,13 @@ const runInit = async (): Promise<void> => {
   // 4. Write configuration file
   await writeConfig(answers);
 
-  // 5. Create AI editor rule file
+  // 5. Update .gitignore to include .testflow/
+  await updateGitignore();
+
+  // 6. Create AI editor rule file
   await createEditorRule();
 
-  // 6. Success message
+  // 7. Success message
   console.log("\n");
   console.log(dynamicGradient("Setup complete."));
   console.log(

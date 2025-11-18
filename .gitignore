@@ -23,7 +23,5 @@ node_modules/
 .yarn/install-state.gz
 .DS_Store
 
-output/
-
-config.json
-*.log
+# testflow
+.testflow/

@@ -24,7 +24,9 @@ const BITBUCKET_BASE_URL = "https://api.bitbucket.org/2.0";
 const { BITBUCKET_EMAIL, BITBUCKET_API_TOKEN } = env;
 
 const logError = (error: unknown, context: string) => {
-  const logPath = join(process.cwd(), "testflow.log");
+  const testflowDir = join(process.cwd(), ".testflow");
+  mkdirSync(testflowDir, { recursive: true });
+  const logPath = join(testflowDir, "testflow.log");
   const timestamp = new Date().toISOString();
   const errorDetails = {
     timestamp,
@@ -403,7 +405,7 @@ const main = async () => {
 
     // Create output directory if it doesn't exist
     // Always output to a folder named with the ticket ID
-    const outputDir = join(process.cwd(), "output", ticketId);
+    const outputDir = join(process.cwd(), ".testflow", "output", ticketId);
     mkdirSync(outputDir, { recursive: true });
 
     // Create raw subdirectory for JSON files

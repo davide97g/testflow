@@ -32,7 +32,9 @@ const { JIRA_EMAIL, JIRA_API_TOKEN, BITBUCKET_EMAIL, BITBUCKET_API_TOKEN } =
   env;
 
 const logError = (error: unknown, context: string) => {
-  const logPath = join(process.cwd(), "testflow.log");
+  const testflowDir = join(process.cwd(), ".testflow");
+  mkdirSync(testflowDir, { recursive: true });
+  const logPath = join(testflowDir, "testflow.log");
   const timestamp = new Date().toISOString();
   const errorDetails = {
     timestamp,
@@ -1042,7 +1044,7 @@ const processIssue = async (issueIdOrKey: string) => {
 
     // Create output directory if it doesn't exist
     // Output to a folder named with the ticket ID
-    const outputDir = join(process.cwd(), "output", issueIdOrKey);
+    const outputDir = join(process.cwd(), ".testflow", "output", issueIdOrKey);
     mkdirSync(outputDir, { recursive: true });
 
     // Create raw subdirectory for JSON files
