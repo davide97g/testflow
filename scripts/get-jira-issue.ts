@@ -1,7 +1,23 @@
 import axios from "axios";
-import { appendFileSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import chalk from "chalk";
+import {
+  appendFileSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { join, relative } from "node:path";
+import ora from "ora";
 import { filterPatch, getPRChanges } from "./get-pr-changes";
+
+// Helper function to convert absolute path to relative path
+const getRelativePath = (absolutePath: string): string => {
+  const relativePath = relative(process.cwd(), absolutePath);
+  return relativePath.startsWith("..")
+    ? absolutePath
+    : `/${relativePath.replace(/\\/g, "/")}`;
+};
 
 const config = JSON.parse(
   readFileSync(join(process.cwd(), "config.json"), "utf8")
@@ -14,18 +30,22 @@ const BITBUCKET_EMAIL = process.env.BITBUCKET_EMAIL;
 const BITBUCKET_API_TOKEN = process.env.BITBUCKET_API_TOKEN;
 
 if (!JIRA_API_TOKEN) {
-  console.error("Error: JIRA_API_TOKEN environment variable is required");
+  console.error(
+    chalk.red("Error: JIRA_API_TOKEN environment variable is required")
+  );
   process.exit(1);
 }
 
 if (!jiraBaseUrl) {
-  console.error("Error: jiraBaseUrl is required in config.json");
+  console.error(chalk.red("Error: jiraBaseUrl is required in config.json"));
   process.exit(1);
 }
 
 if (!JIRA_EMAIL) {
   console.error(
-    "Error: JIRA_EMAIL environment variable is required for Basic Authentication"
+    chalk.red(
+      "Error: JIRA_EMAIL environment variable is required for Basic Authentication"
+    )
   );
   process.exit(1);
 }
@@ -36,24 +56,33 @@ const logError = (error: unknown, context: string) => {
   const errorDetails = {
     timestamp,
     context,
-    error: error instanceof Error ? {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-    } : String(error),
-    axiosError: axios.isAxiosError(error) ? {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      config: {
-        url: error.config?.url,
-        method: error.config?.method,
-        headers: error.config?.headers,
-      },
-    } : undefined,
+    error:
+      error instanceof Error
+        ? {
+            message: error.message,
+            stack: error.stack,
+            name: error.name,
+          }
+        : String(error),
+    axiosError: axios.isAxiosError(error)
+      ? {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+            headers: error.config?.headers,
+          },
+        }
+      : undefined,
   };
-  
-  const logEntry = `\n[${timestamp}] ${context}\n${JSON.stringify(errorDetails, null, 2)}\n`;
+
+  const logEntry = `\n[${timestamp}] ${context}\n${JSON.stringify(
+    errorDetails,
+    null,
+    2
+  )}\n`;
   appendFileSync(logPath, logEntry, "utf-8");
 };
 
@@ -92,50 +121,72 @@ export const getJiraIssue = async ({ issueIdOrKey }: JiraIssueParams) => {
   // Include comments and rendered fields in the response
   let issueUrl = `${normalizedBaseUrl}/rest/api/3/issue/${issueIdOrKey}?expand=renderedFields`;
 
+  const issueSpinner = ora({
+    text: `Fetching Jira issue ${issueIdOrKey}`,
+    color: "white",
+  }).start();
+
   try {
     const issueResponse = await axios.get(issueUrl, { headers });
     issueData.issue = issueResponse.data;
+    issueSpinner.succeed(`Fetched Jira issue ${issueIdOrKey}`);
   } catch (error) {
     if (axios.isAxiosError(error)) {
       // If v3 returns 404, try v2 as fallback
       if (error.response?.status === 404) {
+        issueSpinner.text = `Trying API v2 for issue ${issueIdOrKey}`;
         issueUrl = `${normalizedBaseUrl}/rest/api/2/issue/${issueIdOrKey}?expand=renderedFields`;
         try {
           const issueResponseV2 = await axios.get(issueUrl, { headers });
           issueData.issue = issueResponseV2.data;
+          issueSpinner.succeed(`Fetched Jira issue ${issueIdOrKey} (API v2)`);
         } catch (v2Error) {
-          logError(v2Error, `Failed to fetch Jira issue ${issueIdOrKey} (API v2)`);
+          logError(
+            v2Error,
+            `Failed to fetch Jira issue ${issueIdOrKey} (API v2)`
+          );
+          issueSpinner.fail(
+            chalk.red(`Failed to fetch Jira issue ${issueIdOrKey}`)
+          );
           if (axios.isAxiosError(v2Error)) {
             if (v2Error.response?.status === 401) {
-              console.error("❌ Authentication failed");
+              console.error(chalk.red("❌ Authentication failed"));
               process.exit(1);
             } else if (v2Error.response?.status === 404) {
-              console.error(`❌ Issue ${issueIdOrKey} not found`);
+              console.error(chalk.red(`❌ Issue ${issueIdOrKey} not found`));
               process.exit(1);
             } else if (v2Error.response?.status === 403) {
-              console.error("❌ Access forbidden");
+              console.error(chalk.red("❌ Access forbidden"));
               process.exit(1);
             }
           }
-          console.error("❌ Failed to fetch issue");
+          console.error(chalk.red("❌ Failed to fetch issue"));
           process.exit(1);
         }
       } else if (error.response?.status === 401) {
         logError(error, `Authentication failed for Jira issue ${issueIdOrKey}`);
-        console.error("❌ Authentication failed");
+        issueSpinner.fail(chalk.red("Authentication failed"));
+        console.error(chalk.red("❌ Authentication failed"));
         process.exit(1);
       } else if (error.response?.status === 403) {
         logError(error, `Access forbidden for Jira issue ${issueIdOrKey}`);
-        console.error("❌ Access forbidden");
+        issueSpinner.fail(chalk.red("Access forbidden"));
+        console.error(chalk.red("❌ Access forbidden"));
         process.exit(1);
       } else {
         logError(error, `Failed to fetch Jira issue ${issueIdOrKey}`);
-        console.error("❌ Failed to fetch issue");
+        issueSpinner.fail(
+          chalk.red(`Failed to fetch Jira issue ${issueIdOrKey}`)
+        );
+        console.error(chalk.red("❌ Failed to fetch issue"));
         process.exit(1);
       }
     } else {
       logError(error, `Failed to fetch Jira issue ${issueIdOrKey}`);
-      console.error("❌ Failed to fetch issue");
+      issueSpinner.fail(
+        chalk.red(`Failed to fetch Jira issue ${issueIdOrKey}`)
+      );
+      console.error(chalk.red("❌ Failed to fetch issue"));
       process.exit(1);
     }
   }
@@ -144,11 +195,19 @@ export const getJiraIssue = async ({ issueIdOrKey }: JiraIssueParams) => {
   // Use the same API version that worked for the issue
   const apiVersion = issueUrl.includes("/rest/api/2/") ? "2" : "3";
   const changelogUrl = `${normalizedBaseUrl}/rest/api/${apiVersion}/issue/${issueIdOrKey}/changelog`;
+  const changelogSpinner = ora({
+    text: `Fetching changelog for issue ${issueIdOrKey}`,
+    color: "white",
+  }).start();
   try {
     const changelogResponse = await axios.get(changelogUrl, { headers });
     issueData.changelog = changelogResponse.data;
+    changelogSpinner.succeed(`Fetched changelog for issue ${issueIdOrKey}`);
   } catch (error) {
     logError(error, `Failed to fetch changelog for Jira issue ${issueIdOrKey}`);
+    changelogSpinner.warn(
+      chalk.yellow(`Changelog not available for issue ${issueIdOrKey}`)
+    );
     if (!issueData.errors) issueData.errors = [];
     issueData.errors.push({
       endpoint: "changelog",
@@ -185,6 +244,10 @@ export const getBitbucketBranch = async ({
   // GET /rest/dev-status/1.0/issue/detail?issueId={issueId}&applicationType=bitbucket&dataType=repository
   // Reference: https://support.atlassian.com/jira/kb/how-to-retrieve-pull-request-and-bitbucket-repo-and-branch-information-from-an-issue-using-rest-api/
   if (jiraBaseUrl) {
+    const devStatusSpinner = ora({
+      text: `Searching for branch via Jira Development Status API`,
+      color: "white",
+    }).start();
     try {
       const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString(
         "base64"
@@ -230,6 +293,7 @@ export const getBitbucketBranch = async ({
               branchInfo.branchName = branch.name;
               branchInfo.branchUrl = branch.url;
               branchInfo.source = "jira_dev_status";
+              devStatusSpinner.succeed(`Found branch: ${branch.name}`);
               return branchInfo;
             }
             // Get branch from PR source
@@ -240,6 +304,9 @@ export const getBitbucketBranch = async ({
                 branchInfo.prId = pr.id?.toString();
                 branchInfo.prUrl = pr.url;
                 branchInfo.source = "jira_dev_status";
+                devStatusSpinner.succeed(
+                  `Found branch: ${pr.source.branch.name}`
+                );
                 return branchInfo;
               }
             }
@@ -248,16 +315,30 @@ export const getBitbucketBranch = async ({
       } catch (error) {
         // Dev status API might not be available or integrated, continue to fallback methods
         if (axios.isAxiosError(error) && error.response?.status !== 404) {
-          logError(error, `Jira Development Status API error for issue ${issueIdOrKey}`);
+          logError(
+            error,
+            `Jira Development Status API error for issue ${issueIdOrKey}`
+          );
         }
       }
+      devStatusSpinner.fail(
+        chalk.yellow("Jira Development Status API not available")
+      );
     } catch (error) {
-      logError(error, `Failed to fetch branch from Jira Development Status API for issue ${issueIdOrKey}`);
+      logError(
+        error,
+        `Failed to fetch branch from Jira Development Status API for issue ${issueIdOrKey}`
+      );
+      devStatusSpinner.fail(chalk.yellow("Jira Development Status API failed"));
     }
   }
 
   // Method 2: Search Bitbucket PRs for the ticket ID
   if (workspace && repo && BITBUCKET_EMAIL && BITBUCKET_API_TOKEN) {
+    const prSearchSpinner = ora({
+      text: `Searching Bitbucket PRs for issue ${issueIdOrKey}`,
+      color: "white",
+    }).start();
     try {
       const BITBUCKET_BASE_URL = "https://api.bitbucket.org/2.0";
       const auth = Buffer.from(
@@ -276,6 +357,7 @@ export const getBitbucketBranch = async ({
       );
 
       for (const state of states) {
+        prSearchSpinner.text = `Searching ${state} PRs for issue ${issueIdOrKey}`;
         try {
           // GET /repositories/{workspace}/{repo_slug}/pullrequests?state={state}
           // Reference: https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/#api-repositories-workspace-repo-slug-pullrequests-get
@@ -307,6 +389,9 @@ export const getBitbucketBranch = async ({
                 branchInfo.prId = pr.id?.toString();
                 branchInfo.prUrl = pr.links?.html?.href;
                 branchInfo.source = "bitbucket_pr";
+                prSearchSpinner.succeed(
+                  `Found PR #${pr.id} with branch: ${pr.source?.branch?.name}`
+                );
                 return branchInfo;
               }
             }
@@ -342,6 +427,9 @@ export const getBitbucketBranch = async ({
                     branchInfo.prId = pr.id?.toString();
                     branchInfo.prUrl = pr.links?.html?.href;
                     branchInfo.source = "bitbucket_pr";
+                    prSearchSpinner.succeed(
+                      `Found PR #${pr.id} with branch: ${pr.source?.branch?.name}`
+                    );
                     return branchInfo;
                   }
                 }
@@ -355,15 +443,27 @@ export const getBitbucketBranch = async ({
         } catch (error) {
           // Continue to next state or method
           if (axios.isAxiosError(error) && error.response?.status === 403) {
-            logError(error, `Access forbidden when searching Bitbucket PRs (state: ${state}) for issue ${issueIdOrKey}`);
+            logError(
+              error,
+              `Access forbidden when searching Bitbucket PRs (state: ${state}) for issue ${issueIdOrKey}`
+            );
           }
         }
       }
+      prSearchSpinner.fail(chalk.yellow("No matching PRs found"));
     } catch (error) {
-      logError(error, `Failed to search Bitbucket PRs for issue ${issueIdOrKey}`);
+      logError(
+        error,
+        `Failed to search Bitbucket PRs for issue ${issueIdOrKey}`
+      );
+      prSearchSpinner.fail(chalk.red("Failed to search Bitbucket PRs"));
     }
 
     // Method 3: Search branches directly in Bitbucket
+    const branchSearchSpinner = ora({
+      text: `Searching Bitbucket branches for issue ${issueIdOrKey}`,
+      color: "white",
+    }).start();
     try {
       const BITBUCKET_BASE_URL = "https://api.bitbucket.org/2.0";
       const auth = Buffer.from(
@@ -397,6 +497,7 @@ export const getBitbucketBranch = async ({
             branchInfo.branchName = branch.name;
             branchInfo.branchUrl = branch.links?.html?.href;
             branchInfo.source = "bitbucket_branch";
+            branchSearchSpinner.succeed(`Found branch: ${branch.name}`);
             return branchInfo;
           }
         }
@@ -421,6 +522,7 @@ export const getBitbucketBranch = async ({
                 branchInfo.branchName = branch.name;
                 branchInfo.branchUrl = branch.links?.html?.href;
                 branchInfo.source = "bitbucket_branch";
+                branchSearchSpinner.succeed(`Found branch: ${branch.name}`);
                 return branchInfo;
               }
             }
@@ -431,8 +533,15 @@ export const getBitbucketBranch = async ({
           break;
         }
       }
+      branchSearchSpinner.fail(chalk.yellow("No matching branches found"));
     } catch (error) {
-      logError(error, `Failed to search Bitbucket branches for issue ${issueIdOrKey}`);
+      logError(
+        error,
+        `Failed to search Bitbucket branches for issue ${issueIdOrKey}`
+      );
+      branchSearchSpinner.fail(
+        chalk.red("Failed to search Bitbucket branches")
+      );
     }
   }
 
@@ -614,9 +723,11 @@ const main = async () => {
   const issueIdOrKey = process.argv[2];
 
   if (!issueIdOrKey) {
-    console.error("Error: Issue ID or key is required");
-    console.error("Usage: bun run get-jira-issue.ts <issueIdOrKey>");
-    console.error("Example: bun run get-jira-issue.ts PROJ-123");
+    console.error(chalk.red("Error: Issue ID or key is required"));
+    console.error(
+      chalk.yellow("Usage: bun run get-jira-issue.ts <issueIdOrKey>")
+    );
+    console.error(chalk.yellow("Example: bun run get-jira-issue.ts PROJ-123"));
     process.exit(1);
   }
 
@@ -625,10 +736,25 @@ const main = async () => {
 
     // Try to fetch associated Bitbucket branch
     let branchInfo: BitbucketBranchInfo | null = null;
+    const branchSpinner = ora({
+      text: `Searching for Bitbucket branch for issue ${issueIdOrKey}`,
+      color: "white",
+    }).start();
     try {
       branchInfo = await getBitbucketBranch({ issueIdOrKey });
+      if (branchInfo) {
+        branchSpinner.succeed(
+          `Found branch: ${branchInfo.branchName || "N/A"}`
+        );
+      } else {
+        branchSpinner.warn(chalk.yellow("No branch found for this issue"));
+      }
     } catch (error) {
-      logError(error, `Failed to fetch Bitbucket branch for issue ${issueIdOrKey}`);
+      logError(
+        error,
+        `Failed to fetch Bitbucket branch for issue ${issueIdOrKey}`
+      );
+      branchSpinner.fail(chalk.red("Failed to fetch Bitbucket branch"));
     }
 
     // Create output directory if it doesn't exist
@@ -641,6 +767,10 @@ const main = async () => {
     mkdirSync(rawDir, { recursive: true });
 
     // Save JSON file with issue data
+    const saveSpinner = ora({
+      text: `Saving issue data to output directory`,
+      color: "white",
+    }).start();
     const jsonPath = join(rawDir, "jira-issue.json");
     // Delete only the specific file if it exists (don't clean the entire raw folder)
     try {
@@ -649,7 +779,7 @@ const main = async () => {
       // File doesn't exist, which is fine
     }
     writeFileSync(jsonPath, JSON.stringify(issueData, null, 2), "utf-8");
-    console.log(`✅ Issue data saved to: ${jsonPath}`);
+    saveSpinner.succeed(`Issue data saved to: ${getRelativePath(jsonPath)}`);
 
     // Save branch info if found
     if (branchInfo) {
@@ -660,10 +790,14 @@ const main = async () => {
         // File doesn't exist, which is fine
       }
       writeFileSync(branchPath, JSON.stringify(branchInfo, null, 2), "utf-8");
-      console.log(`✅ Branch info saved to: ${branchPath}`);
+      console.log(`Branch info saved to: ${getRelativePath(branchPath)}`);
 
       // If PR ID is found, fetch PR changes
       if (branchInfo.prId && workspace && repo) {
+        const prChangesSpinner = ora({
+          text: `  Fetching PR changes for PR #${branchInfo.prId}`,
+          color: "white",
+        }).start();
         try {
           const prChanges = await getPRChanges({
             workspace,
@@ -683,34 +817,51 @@ const main = async () => {
             JSON.stringify(prChanges, null, 2),
             "utf-8"
           );
-          console.log(`✅ PR changes saved to: ${prJsonPath}`);
+          prChangesSpinner.succeed(
+            `  PR changes saved to: ${getRelativePath(prJsonPath)}`
+          );
 
           // Save patch file if available
           if (prChanges.patch) {
+            const patchSpinner = ora({
+              text: `  Saving PR patch file`,
+              color: "white",
+            }).start();
             const filteredPatch = filterPatch(prChanges.patch);
             const patchPath = join(outputDir, "pr.patch");
             writeFileSync(patchPath, filteredPatch, "utf-8");
-            console.log(`✅ PR patch saved to: ${patchPath}`);
+            patchSpinner.succeed(
+              `  PR patch saved to: ${getRelativePath(patchPath)}`
+            );
           }
         } catch (error) {
-          logError(error, `Failed to fetch PR changes for PR #${branchInfo.prId}`);
-          console.error("❌ Failed to fetch PR changes");
+          logError(
+            error,
+            `Failed to fetch PR changes for PR #${branchInfo.prId}`
+          );
+          prChangesSpinner.fail(chalk.red("  Failed to fetch PR changes"));
         }
       }
     }
 
     // Create and save compact version for LLM context (plain text)
+    const compactSpinner = ora({
+      text: `Creating compact issue description`,
+      color: "white",
+    }).start();
     const compactIssue = createCompactIssue(issueData);
     const compactPath = join(outputDir, "jira-issue-description.txt");
     writeFileSync(compactPath, compactIssue, "utf-8");
-    console.log(`✅ Compact issue data saved to: ${compactPath}`);
+    compactSpinner.succeed(
+      `Compact issue data saved to: ${getRelativePath(compactPath)}`
+    );
 
     if (branchInfo) {
-      console.log(`✅ Branch found: ${branchInfo.branchName || "N/A"}`);
+      console.log(`Branch found: ${branchInfo.branchName || "N/A"}`);
     }
   } catch (error) {
     logError(error, `Failed to fetch Jira issue ${issueIdOrKey}`);
-    console.error("❌ Failed to fetch Jira issue");
+    console.error(chalk.red("❌ Failed to fetch Jira issue"));
     process.exit(1);
   }
 };

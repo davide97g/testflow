@@ -1,6 +1,14 @@
 import axios from "axios";
 import { appendFileSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
+import ora from "ora";
+import chalk from "chalk";
+
+// Helper function to convert absolute path to relative path
+const getRelativePath = (absolutePath: string): string => {
+  const relativePath = relative(process.cwd(), absolutePath);
+  return relativePath.startsWith("..") ? absolutePath : `/${relativePath.replace(/\\/g, "/")}`;
+};
 
 const config = JSON.parse(
   readFileSync(join(process.cwd(), "config.json"), "utf8")
@@ -13,7 +21,7 @@ const BITBUCKET_API_TOKEN = process.env.BITBUCKET_API_TOKEN;
 
 if (!BITBUCKET_EMAIL || !BITBUCKET_API_TOKEN) {
   console.error(
-    "Error: BITBUCKET_EMAIL and BITBUCKET_API_TOKEN environment variables are required"
+    chalk.red("Error: BITBUCKET_EMAIL and BITBUCKET_API_TOKEN environment variables are required")
   );
   process.exit(1);
 }
@@ -221,8 +229,13 @@ export const getPRChanges = async ({
   // Get PR details using the official API endpoint
   // GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}
   // Reference: https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/#api-repositories-workspace-repo-slug-pullrequests-pull-request-id-get
+  const prSpinner = ora({
+    text: `Fetching PR details for PR #${prId}`,
+    color: "white",
+  }).start();
   const prUrl = `${BITBUCKET_BASE_URL}/repositories/${workspace}/${repo}/pullrequests/${prId}`;
   const prResponse = await axios.get(prUrl, { headers });
+  prSpinner.succeed(`Fetched PR details for PR #${prId}`);
 
   const changes: {
     pr: unknown;
@@ -240,12 +253,18 @@ export const getPRChanges = async ({
 
   // Get PR diffstat (changed files with stats) - optional, requires read:repository:bitbucket scope
   // GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/diffstat
+  const diffstatSpinner = ora({
+    text: `  Fetching PR diffstat for PR #${prId}`,
+    color: "white",
+  }).start();
   const diffstatUrl = `${BITBUCKET_BASE_URL}/repositories/${workspace}/${repo}/pullrequests/${prId}/diffstat`;
   try {
     const diffstatResponse = await axios.get(diffstatUrl, { headers });
     changes.diffstat = diffstatResponse.data;
+    diffstatSpinner.succeed(`  Fetched PR diffstat for PR #${prId}`);
   } catch (error) {
     logError(error, `Failed to fetch PR diffstat for PR ${prId}`);
+    diffstatSpinner.warn(chalk.yellow(`  PR diffstat not available for PR #${prId}`));
     if (!changes.errors) changes.errors = [];
     if (axios.isAxiosError(error) && error.response?.status === 403) {
       const errorData = error.response.data as {
@@ -267,6 +286,10 @@ export const getPRChanges = async ({
 
   // Get PR diff (actual file changes - returns plain text) - optional, requires read:repository:bitbucket scope
   // GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/diff
+  const diffSpinner = ora({
+    text: `  Fetching PR diff for PR #${prId}`,
+    color: "white",
+  }).start();
   const diffUrl = `${BITBUCKET_BASE_URL}/repositories/${workspace}/${repo}/pullrequests/${prId}/diff`;
   try {
     const diffResponse = await axios.get(diffUrl, {
@@ -277,8 +300,10 @@ export const getPRChanges = async ({
       responseType: "text",
     });
     changes.diff = diffResponse.data;
+    diffSpinner.succeed(`  Fetched PR diff for PR #${prId}`);
   } catch (error) {
     logError(error, `Failed to fetch PR diff for PR ${prId}`);
+    diffSpinner.warn(chalk.yellow(`  PR diff not available for PR #${prId}`));
     if (!changes.errors) changes.errors = [];
     if (axios.isAxiosError(error) && error.response?.status === 403) {
       const errorData = error.response.data as {
@@ -301,6 +326,10 @@ export const getPRChanges = async ({
   // Get PR patch (unified diff format) - optional, requires read:repository:bitbucket scope
   // GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/patch
   // Reference: https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/#api-repositories-workspace-repo-slug-pullrequests-pull-request-id-patch-get
+  const patchSpinner = ora({
+    text: `  Fetching PR patch for PR #${prId}`,
+    color: "white",
+  }).start();
   const patchUrl = `${BITBUCKET_BASE_URL}/repositories/${workspace}/${repo}/pullrequests/${prId}/patch`;
   try {
     const patchResponse = await axios.get(patchUrl, {
@@ -311,8 +340,10 @@ export const getPRChanges = async ({
       responseType: "text",
     });
     changes.patch = patchResponse.data;
+    patchSpinner.succeed(`  Fetched PR patch for PR #${prId}`);
   } catch (error) {
     logError(error, `Failed to fetch PR patch for PR ${prId}`);
+    patchSpinner.warn(chalk.yellow(`  PR patch not available for PR #${prId}`));
     if (!changes.errors) changes.errors = [];
     if (axios.isAxiosError(error) && error.response?.status === 403) {
       const errorData = error.response.data as {
@@ -338,18 +369,29 @@ export const getPRChanges = async ({
 const main = async () => {
   const prId = process.argv[2];
 
+  if (!prId) {
+    console.error(chalk.red("Error: PR ID is required"));
+    console.error(chalk.yellow("Usage: bun run get-pr-changes.ts <prId>"));
+    console.error(chalk.yellow("Example: bun run get-pr-changes.ts 123"));
+    process.exit(1);
+  }
+
   try {
     const changes = await getPRChanges({ workspace, repo, prId });
 
     // Extract ticket ID from PR data
+    const ticketIdSpinner = ora({
+      text: `Extracting ticket ID from PR #${prId}`,
+      color: "white",
+    }).start();
     const ticketId = extractTicketId(changes.pr);
 
     if (!ticketId) {
-      console.error(
-        "❌ Could not extract ticket ID from PR"
-      );
+      ticketIdSpinner.fail(chalk.red("Could not extract ticket ID from PR"));
+      console.error(chalk.red("❌ Could not extract ticket ID from PR"));
       process.exit(1);
     }
+    ticketIdSpinner.succeed(`Extracted ticket ID: ${ticketId}`);
 
     // Create output directory if it doesn't exist
     // Always output to a folder named with the ticket ID
@@ -361,6 +403,10 @@ const main = async () => {
     mkdirSync(rawDir, { recursive: true });
 
     // Save JSON file with PR changes
+    const saveSpinner = ora({
+      text: `Saving PR changes to output directory`,
+      color: "white",
+    }).start();
     const jsonPath = join(rawDir, "pr.json");
     // Delete only the specific file if it exists (don't clean the entire raw folder)
     try {
@@ -369,18 +415,22 @@ const main = async () => {
       // File doesn't exist, which is fine
     }
     writeFileSync(jsonPath, JSON.stringify(changes, null, 2), "utf-8");
-    console.log(`✅ PR changes saved to: ${jsonPath}`);
+    saveSpinner.succeed(`PR changes saved to: ${getRelativePath(jsonPath)}`);
 
     // Save patch file if available
     if (changes.patch) {
+      const patchSaveSpinner = ora({
+        text: `  Saving PR patch file`,
+        color: "white",
+      }).start();
       const filteredPatch = filterPatch(changes.patch);
       const patchPath = join(outputDir, "pr.patch");
       writeFileSync(patchPath, filteredPatch, "utf-8");
-      console.log(`✅ PR patch saved to: ${patchPath}`);
+      patchSaveSpinner.succeed(`  PR patch saved to: ${getRelativePath(patchPath)}`);
     }
   } catch (error) {
     logError(error, `Failed to fetch PR changes for PR ${prId}`);
-    console.error("❌ Failed to fetch PR changes");
+    console.error(chalk.red("❌ Failed to fetch PR changes"));
     process.exit(1);
   }
 };
