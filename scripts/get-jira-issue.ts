@@ -5,7 +5,7 @@ import { appendFileSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ora from "ora";
 import { loadConfigSync } from "../src/config.js";
-import { loadEnv } from "../src/env.js";
+import { loadEnvWithWarnings } from "../src/env.js";
 import { filterPatch, getPRChanges } from "./get-pr-changes.js";
 
 // Helper function to convert absolute path to relative path
@@ -20,14 +20,13 @@ const config = loadConfigSync();
 const { workspace, repo } = config.bitbucket;
 const { baseUrl: jiraBaseUrl } = config.jira;
 
-// Load and validate environment variables
-let env;
-try {
-  env = loadEnv();
-} catch (error) {
-  console.error(chalk.red(error instanceof Error ? error.message : String(error)));
-  process.exit(1);
-}
+// Load and validate environment variables (shows warnings instead of errors)
+const env = loadEnvWithWarnings([
+  "JIRA_EMAIL",
+  "JIRA_API_TOKEN",
+  "BITBUCKET_EMAIL",
+  "BITBUCKET_API_TOKEN",
+]);
 
 const { JIRA_EMAIL, JIRA_API_TOKEN, BITBUCKET_EMAIL, BITBUCKET_API_TOKEN } = env;
 

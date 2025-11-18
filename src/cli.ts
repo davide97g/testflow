@@ -1,7 +1,8 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import { Command } from "commander";
 import fs from "fs-extra";
+import { existsSync } from "fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,8 +22,15 @@ program
   .version(version);
 
 const runNodeScript = (scriptPath: string, args: string[] = []): void => {
-  const fullPath = path.join(__dirname, scriptPath);
-  const result = spawnSync("bun", [fullPath, ...args], {
+  // Use .js extension for built files, fallback to .ts for development
+  const jsPath = scriptPath.replace(/\.ts$/, ".js");
+  const fullPath = path.join(__dirname, jsPath);
+  const tsPath = path.join(__dirname, scriptPath);
+  
+  // Try .js first (production), then .ts (development)
+  const scriptToRun = existsSync(fullPath) ? fullPath : tsPath;
+  
+  const result = spawnSync("bun", [scriptToRun, ...args], {
     stdio: "inherit",
     cwd: process.cwd(),
   });

@@ -1,0 +1,64 @@
+# Source files
+src/
+scripts/
+
+# Development files
+*.log
+testflow.log
+.env
+.env.*
+!.env.example
+
+# Build artifacts (will be included via files field)
+# dist/ is included in package
+
+# Development directories
+node_modules/
+output/
+.pnp
+.pnp.js
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Testing
+test-results/
+playwright-report/
+blob-report/
+playwright/
+e2e/
+junit/
+har/
+
+# Config files (user-specific)
+config.json
+
+# Documentation (keep README.md, exclude others)
+docs/
+prompts/
+
+# CI/CD (not needed in package)
+.github/
+
+# Lock files
+bun.lockb
+yarn.lock
+package-lock.json
+
+# TypeScript
+tsconfig.json
+*.tsbuildinfo
+

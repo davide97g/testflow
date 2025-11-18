@@ -4,7 +4,7 @@ import { appendFileSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ora from "ora";
 import { loadConfigSync } from "../src/config.js";
-import { loadEnv } from "../src/env.js";
+import { loadEnvWithWarnings } from "../src/env.js";
 
 // Helper function to convert absolute path to relative path
 const getRelativePath = (absolutePath: string): string => {
@@ -17,14 +17,8 @@ const getRelativePath = (absolutePath: string): string => {
 const config = loadConfigSync();
 const { workspace, repo } = config.bitbucket;
 
-// Load and validate environment variables
-let env;
-try {
-  env = loadEnv();
-} catch (error) {
-  console.error(chalk.red(error instanceof Error ? error.message : String(error)));
-  process.exit(1);
-}
+// Load and validate environment variables (shows warnings instead of errors)
+const env = loadEnvWithWarnings(["BITBUCKET_EMAIL", "BITBUCKET_API_TOKEN"]);
 
 const BITBUCKET_BASE_URL = "https://api.bitbucket.org/2.0";
 const { BITBUCKET_EMAIL, BITBUCKET_API_TOKEN } = env;
