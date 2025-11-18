@@ -6,19 +6,26 @@ import { z } from "zod";
  * Zod schema for configuration validation
  */
 export const configSchema = z.object({
-  bitbucket: z.object({
-    workspace: z.string().min(1, "Bitbucket workspace is required"),
-    repo: z.string().min(1, "Bitbucket repository is required"),
-  }),
+  bitbucket: z
+    .object({
+      workspace: z.string().min(1, "Bitbucket workspace is required"),
+      repo: z.string().min(1, "Bitbucket repository is required"),
+    })
+    .optional(),
   jira: z.object({
-    baseUrl: z
-      .string()
-      .url("Jira baseUrl must be a valid URL")
-      .min(1, "Jira baseUrl is required"),
+    baseUrl: z.string().url("Jira baseUrl must be a valid URL").min(1, "Jira baseUrl is required"),
     boardId: z.number().int().positive().optional(),
     assignee: z.string().email("Assignee must be a valid email").optional(),
     statuses: z.array(z.string().min(1)).optional(),
   }),
+  confluence: z
+    .object({
+      baseUrl: z
+        .string()
+        .url("Confluence baseUrl must be a valid URL")
+        .min(1, "Confluence baseUrl is required"),
+    })
+    .optional(),
 });
 
 /**

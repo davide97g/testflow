@@ -17,12 +17,13 @@ const colors = ["#A4A5A7", "#C74600", "#EB640A", "#F2A65D"];
 const dynamicGradient = gradient(colors);
 
 interface InitAnswers {
-  workspace: string;
-  repo: string;
+  workspace?: string;
+  repo?: string;
   jiraBaseUrl: string;
   boardId?: number;
   assignee?: string;
   statuses?: string[];
+  confluenceBaseUrl?: string;
 }
 
 interface PackageJson {
@@ -81,14 +82,16 @@ const loadDefaults = async (): Promise<Partial<InitAnswers>> => {
   // Try to read existing config.json
   try {
     const existingConfig = await loadConfig();
-    defaults.workspace = existingConfig.bitbucket.workspace;
-    defaults.repo = existingConfig.bitbucket.repo;
+    defaults.workspace = existingConfig.bitbucket?.workspace;
+    defaults.repo = existingConfig.bitbucket?.repo;
     defaults.jiraBaseUrl = existingConfig.jira.baseUrl;
     defaults.boardId = existingConfig.jira.boardId;
     defaults.assignee = existingConfig.jira.assignee;
     defaults.statuses = existingConfig.jira.statuses;
+    defaults.confluenceBaseUrl = existingConfig.confluence?.baseUrl;
   } catch (error) {
     // Ignore errors reading config (file might not exist yet)
+    console.error(chalk.red(`Error loading config: ${error}`));
   }
 
   // Try to read package.json for repo name
@@ -101,6 +104,7 @@ const loadDefaults = async (): Promise<Partial<InitAnswers>> => {
       }
     }
   } catch (error) {
+    console.error(chalk.red(`Error reading package.json: ${error}`));
     // Ignore errors reading package.json
   }
 
@@ -118,23 +122,34 @@ const collectAnswers = async (
   console.log(chalk.cyan("\n📦 Bitbucket Configuration"));
   console.log(chalk.gray("─".repeat(40)));
 
-  const workspace = await input({
-    message: "Bitbucket workspace:",
-    default: defaults.workspace || "",
-    validate: (val: string) => {
-      const trimmed = (val ?? "").trim();
-      return trimmed ? true : "Workspace is required";
-    },
+  // Optional: Bitbucket configuration
+  const useBitbucket = await confirm({
+    message: "Do you want to configure Bitbucket integration?",
+    default: defaults.workspace !== undefined && defaults.repo !== undefined,
   });
 
-  const repo = await input({
-    message: "Bitbucket repository:",
-    default: defaults.repo || "",
-    validate: (val: string) => {
-      const trimmed = (val ?? "").trim();
-      return trimmed ? true : "Repository name is required";
-    },
-  });
+  let workspace: string | undefined;
+  let repo: string | undefined;
+
+  if (useBitbucket) {
+    workspace = await input({
+      message: "Bitbucket workspace:",
+      default: defaults.workspace || "",
+      validate: (val: string) => {
+        const trimmed = (val ?? "").trim();
+        return trimmed ? true : "Workspace is required";
+      },
+    });
+
+    repo = await input({
+      message: "Bitbucket repository:",
+      default: defaults.repo || "",
+      validate: (val: string) => {
+        const trimmed = (val ?? "").trim();
+        return trimmed ? true : "Repository name is required";
+      },
+    });
+  }
 
   console.log(chalk.cyan("\n🎯 Jira Configuration"));
   console.log(chalk.gray("─".repeat(40)));
@@ -176,7 +191,7 @@ const collectAnswers = async (
           return "Board ID is required";
         }
         const parsed = parseInt(trimmed, 10);
-        if (isNaN(parsed)) {
+        if (Number.isNaN(parsed)) {
           return "Board ID must be a valid number";
         }
         return true;
@@ -238,13 +253,49 @@ const collectAnswers = async (
       .filter(Boolean);
   }
 
+  console.log(chalk.cyan("\n📚 Confluence Configuration"));
+  console.log(chalk.gray("─".repeat(40)));
+
+  // Optional: Confluence base URL
+  const useConfluence = await confirm({
+    message: "Do you want to configure Confluence integration?",
+    default: defaults.confluenceBaseUrl !== undefined,
+  });
+
+  let confluenceBaseUrl: string | undefined;
+  if (useConfluence) {
+    // Default to Jira base URL if not set
+    const defaultConfluenceUrl =
+      defaults.confluenceBaseUrl || jiraBaseUrl.trim();
+    confluenceBaseUrl = await input({
+      message: "Confluence base URL:",
+      default: defaultConfluenceUrl,
+      validate: (val: string) => {
+        const trimmed = (val ?? "").trim();
+        if (!trimmed) {
+          return "Confluence base URL is required";
+        }
+        try {
+          const url = new URL(trimmed);
+          if (!url.protocol.startsWith("http")) {
+            return "Confluence base URL must be a valid HTTP/HTTPS URL";
+          }
+          return true;
+        } catch {
+          return "Confluence base URL must be a valid URL";
+        }
+      },
+    });
+  }
+
   return {
-    workspace: workspace.trim(),
-    repo: repo.trim(),
+    workspace: workspace?.trim(),
+    repo: repo?.trim(),
     jiraBaseUrl: jiraBaseUrl.trim(),
     boardId,
     assignee: assignee?.trim(),
     statuses,
+    confluenceBaseUrl: confluenceBaseUrl?.trim(),
   };
 };
 
@@ -261,10 +312,13 @@ const writeConfig = async (answers: InitAnswers): Promise<void> => {
 
     const configPath = path.join(testflowDir, "config.json");
     const config: Config = {
-      bitbucket: {
-        workspace: answers.workspace,
-        repo: answers.repo,
-      },
+      ...(answers.workspace &&
+        answers.repo && {
+          bitbucket: {
+            workspace: answers.workspace,
+            repo: answers.repo,
+          },
+        }),
       jira: {
         baseUrl: answers.jiraBaseUrl,
         ...(answers.boardId !== undefined && { boardId: answers.boardId }),
@@ -272,6 +326,11 @@ const writeConfig = async (answers: InitAnswers): Promise<void> => {
         ...(answers.statuses &&
           answers.statuses.length > 0 && { statuses: answers.statuses }),
       },
+      ...(answers.confluenceBaseUrl && {
+        confluence: {
+          baseUrl: answers.confluenceBaseUrl,
+        },
+      }),
     };
 
     writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -351,6 +410,7 @@ const updateGitignore = async (): Promise<void> => {
     writeFileSync(gitignorePath, gitignoreContent, "utf-8");
     console.log(chalk.gray(`Updated .gitignore to include ${testflowEntry}`));
   } catch (error) {
+    console.error(chalk.red(`Error updating .gitignore: ${error}`));
     // Silently fail if .gitignore doesn't exist or can't be written
     // This is not critical for the init process
   }
@@ -412,7 +472,9 @@ const createEditorRule = async (): Promise<void> => {
 
   try {
     // Ensure directory exists
-    mkdirSync(filePath, { recursive: true });
+    if (filePath !== process.cwd()) {
+      mkdirSync(filePath, { recursive: true });
+    }
 
     // Write the rule file
     writeFileSync(ruleFilePath, promptContent, "utf-8");
@@ -422,9 +484,12 @@ const createEditorRule = async (): Promise<void> => {
     );
   } catch (error) {
     ruleSpinner.fail(`Failed to create ${fileName}`);
-    console.error(
-      chalk.red(error instanceof Error ? error.message : String(error))
-    );
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(chalk.red(`Error: ${errorMessage}`));
+    console.error(chalk.gray(`Attempted to write to: ${ruleFilePath}`));
+    if (error instanceof Error && error.stack) {
+      console.error(chalk.gray(error.stack));
+    }
   }
 };
 

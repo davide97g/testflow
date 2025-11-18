@@ -9,16 +9,25 @@ export const envSchema = z.object({
     .string()
     .email("JIRA_EMAIL must be a valid email address")
     .min(1, "JIRA_EMAIL is required"),
-  JIRA_API_TOKEN: z
-    .string()
-    .min(1, "JIRA_API_TOKEN is required"),
+  JIRA_API_TOKEN: z.string().min(1, "JIRA_API_TOKEN is required"),
   BITBUCKET_EMAIL: z
     .string()
     .email("BITBUCKET_EMAIL must be a valid email address")
-    .min(1, "BITBUCKET_EMAIL is required"),
+    .min(1, "BITBUCKET_EMAIL is required")
+    .optional(),
   BITBUCKET_API_TOKEN: z
     .string()
-    .min(1, "BITBUCKET_API_TOKEN is required"),
+    .min(1, "BITBUCKET_API_TOKEN is required")
+    .optional(),
+  CONFLUENCE_EMAIL: z
+    .string()
+    .email("CONFLUENCE_EMAIL must be a valid email address")
+    .min(1, "CONFLUENCE_EMAIL is required")
+    .optional(),
+  CONFLUENCE_API_TOKEN: z
+    .string()
+    .min(1, "CONFLUENCE_API_TOKEN is required")
+    .optional(),
 });
 
 /**
@@ -42,6 +51,8 @@ export const loadEnv = (): Env => {
     JIRA_API_TOKEN: process.env.JIRA_API_TOKEN,
     BITBUCKET_EMAIL: process.env.BITBUCKET_EMAIL,
     BITBUCKET_API_TOKEN: process.env.BITBUCKET_API_TOKEN,
+    CONFLUENCE_EMAIL: process.env.CONFLUENCE_EMAIL,
+    CONFLUENCE_API_TOKEN: process.env.CONFLUENCE_API_TOKEN,
   };
 
   try {
@@ -82,18 +93,15 @@ export const loadEnvOptional = (): Env | undefined => {
  * @returns Partial environment variables object (may be missing some values)
  */
 export const loadEnvWithWarnings = (
-  requiredVars: Array<keyof Env> = [
-    "JIRA_EMAIL",
-    "JIRA_API_TOKEN",
-    "BITBUCKET_EMAIL",
-    "BITBUCKET_API_TOKEN",
-  ]
+  requiredVars: Array<keyof Env> = ["JIRA_EMAIL", "JIRA_API_TOKEN"]
 ): PartialEnv => {
   const env: PartialEnv = {
     JIRA_EMAIL: process.env.JIRA_EMAIL,
     JIRA_API_TOKEN: process.env.JIRA_API_TOKEN,
     BITBUCKET_EMAIL: process.env.BITBUCKET_EMAIL,
     BITBUCKET_API_TOKEN: process.env.BITBUCKET_API_TOKEN,
+    CONFLUENCE_EMAIL: process.env.CONFLUENCE_EMAIL,
+    CONFLUENCE_API_TOKEN: process.env.CONFLUENCE_API_TOKEN,
   };
 
   const missingVars: Array<keyof Env> = [];
@@ -106,7 +114,11 @@ export const loadEnvWithWarnings = (
       missingVars.push(varName);
     } else {
       // Validate email format for email variables
-      if (varName === "JIRA_EMAIL" || varName === "BITBUCKET_EMAIL") {
+      if (
+        varName === "JIRA_EMAIL" ||
+        varName === "BITBUCKET_EMAIL" ||
+        varName === "CONFLUENCE_EMAIL"
+      ) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(value)) {
           invalidVars.push({
@@ -121,7 +133,7 @@ export const loadEnvWithWarnings = (
   // Show warnings if any variables are missing or invalid
   if (missingVars.length > 0 || invalidVars.length > 0) {
     console.warn(
-      chalk.yellow("\n⚠️  Environment Variables Warning\n" + "─".repeat(50))
+      chalk.yellow(`\n⚠️  Environment Variables Warning\n${"─".repeat(50)}`)
     );
 
     if (missingVars.length > 0) {
@@ -138,20 +150,58 @@ export const loadEnvWithWarnings = (
       }
     }
 
-    // Show documentation references
-    console.warn(chalk.yellow("\n📚 Documentation:"));
-    const needsJira = missingVars.includes("JIRA_EMAIL") ||
-      missingVars.includes("JIRA_API_TOKEN") ||
-      invalidVars.some((v) => v.name === "JIRA_EMAIL");
-    const needsBitbucket = missingVars.includes("BITBUCKET_EMAIL") ||
+    // Check which integrations are missing
+    const missingBitbucket =
+      !env.BITBUCKET_EMAIL ||
+      !env.BITBUCKET_API_TOKEN ||
+      missingVars.includes("BITBUCKET_EMAIL") ||
       missingVars.includes("BITBUCKET_API_TOKEN") ||
       invalidVars.some((v) => v.name === "BITBUCKET_EMAIL");
 
+    const missingConfluence =
+      !env.CONFLUENCE_EMAIL ||
+      !env.CONFLUENCE_API_TOKEN ||
+      missingVars.includes("CONFLUENCE_EMAIL") ||
+      missingVars.includes("CONFLUENCE_API_TOKEN") ||
+      invalidVars.some((v) => v.name === "CONFLUENCE_EMAIL");
+
+    // Show integration status
+    if (missingBitbucket || missingConfluence) {
+      console.warn(chalk.yellow("\n⚠️  Integration Status:"));
+      if (missingBitbucket) {
+        console.warn(
+          chalk.yellow(
+            "  • Bitbucket integration: SKIPPED (missing BITBUCKET_EMAIL or BITBUCKET_API_TOKEN)"
+          )
+        );
+      }
+      if (missingConfluence) {
+        console.warn(
+          chalk.yellow(
+            "  • Confluence integration: SKIPPED (missing CONFLUENCE_EMAIL or CONFLUENCE_API_TOKEN)"
+          )
+        );
+      }
+    }
+
+    // Show documentation references
+    console.warn(chalk.yellow("\n📚 Documentation:"));
+    const needsJira =
+      missingVars.includes("JIRA_EMAIL") ||
+      missingVars.includes("JIRA_API_TOKEN") ||
+      invalidVars.some((v) => v.name === "JIRA_EMAIL");
+    const needsBitbucket =
+      missingVars.includes("BITBUCKET_EMAIL") ||
+      missingVars.includes("BITBUCKET_API_TOKEN") ||
+      invalidVars.some((v) => v.name === "BITBUCKET_EMAIL");
+    const needsConfluence =
+      missingVars.includes("CONFLUENCE_EMAIL") ||
+      missingVars.includes("CONFLUENCE_API_TOKEN") ||
+      invalidVars.some((v) => v.name === "CONFLUENCE_EMAIL");
+
     if (needsJira) {
       console.warn(
-        chalk.yellow(
-          "  • JIRA API Token: docs/JIRA_API_TOKEN_GUIDE.md"
-        )
+        chalk.yellow("  • JIRA API Token: docs/JIRA_API_TOKEN_GUIDE.md")
       );
     }
     if (needsBitbucket) {
@@ -161,15 +211,29 @@ export const loadEnvWithWarnings = (
         )
       );
     }
+    if (needsConfluence) {
+      console.warn(
+        chalk.yellow(
+          "  • Confluence API Token: docs/CONFLUENCE_API_TOKEN_GUIDE.md (if available)"
+        )
+      );
+    }
+
+    if (missingVars.length > 0 || invalidVars.length > 0) {
+      console.warn(
+        chalk.yellow(
+          "\nNote: Missing optional environment variables will cause their integrations to be skipped."
+        )
+      );
+    }
 
     console.warn(
       chalk.yellow(
         "\nPlease set the required environment variables in your .env file."
       )
     );
-    console.warn(chalk.yellow("─".repeat(50) + "\n"));
+    console.warn(chalk.yellow(`${"─".repeat(50)}\n`));
   }
 
   return env;
 };
-

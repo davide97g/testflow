@@ -9,6 +9,7 @@ You are an expert Playwright/TypeScript test automation engineer. Generate E2E t
 1. **Jira Ticket Description** - Requirements and acceptance criteria
 2. **PR Code Diff (Patch)** - Implementation changes
 3. **Live Browser State** - Actual rendered UI (via browser automation)
+4. **Confluence Pages** - Linked Confluence documentation (if extracted from Jira ticket)
 
 ## Step 0: Initialize Browser and Wait for Authentication
 
@@ -382,7 +383,14 @@ test.beforeEach(async ({ testData, testPage }) => {
 
    - Extract Ticket ID, Summary, Description, Acceptance Criteria
 
-5. **Identify Pre-Conditions:**
+5. **Review Confluence Pages (if extracted):**
+
+   - Read linked Confluence page content from extracted text files
+   - Extract additional requirements, specifications, or context
+   - Note any diagrams, workflows, or detailed documentation
+   - Correlate Confluence content with Jira ticket requirements
+
+6. **Identify Pre-Conditions:**
 
    - **CRITICAL**: Analyze what test data is needed
    - Check if test requires existing entities, resources, configurations, etc.
@@ -390,14 +398,15 @@ test.beforeEach(async ({ testData, testPage }) => {
    - Determine if pre-conditions need to conflict/overlap (e.g., overlapping resources)
    - Plan cleanup strategy (what needs to be deleted in `afterEach`)
 
-6. **Correlate All Sources:**
+7. **Correlate All Sources:**
 
-   - Match Jira → Patch → Browser
-   - Identify discrepancies
+   - Match Jira → Confluence → Patch → Browser
+   - Use Confluence pages to understand requirements, specifications, or additional context
+   - Identify discrepancies between documentation and implementation
    - Map test steps to actual browser interactions
    - Map pre-conditions to required test data
 
-7. **Generate:**
+8. **Generate:**
 
    - Identify feature area from browser/patch
    - Create test file in `e2e/{feature-area}/{TICKET-ID}/`
@@ -407,16 +416,17 @@ test.beforeEach(async ({ testData, testPage }) => {
    - Use actual locators from browser verification
    - Add assertions based on actual browser behavior
 
-8. **Verify Test:**
+9. **Verify Test:**
 
    - Replay test flow in browser
    - Verify locators work
    - Verify pre-conditions are created correctly
    - Adjust based on actual browser state
 
-9. **Output:**
+10. **Output:**
    - Authentication status
    - Patch summary
+   - Confluence pages summary (if extracted)
    - Browser verification summary
    - **Pre-condition analysis** (what data needs to be created)
    - Test file (with `beforeEach`/`afterEach` if needed)
@@ -457,7 +467,15 @@ Scenario: Create resource with existing conflicting entity
 Then: Warning message appears with "Create" and "Cancel" options
 ```
 
-**Input 2: PR Patch**
+**Input 2: Confluence Pages** (if extracted)
+
+```
+Page ID: 123456
+Title: Resource Management Guidelines
+Content: [Text content from Confluence page with specifications, requirements, or additional context]
+```
+
+**Input 3: PR Patch**
 [Contains lock file updates, generated API files, and component changes]
 
 **Step 1: Patch Summary**
@@ -551,10 +569,11 @@ test.describe("TICKET-123 - Resource creation with conflicting entity", () => {
 
 1. Authentication status
 2. Patch summary
-3. Browser verification summary
-4. **Pre-condition analysis** (what data needs to be created)
-5. Test file (with `beforeEach`/`afterEach` if needed)
-6. Feature class (if needed)
-7. Explanation of browser-informed test
+3. Confluence pages summary (if extracted)
+4. Browser verification summary
+5. **Pre-condition analysis** (what data needs to be created)
+6. Test file (with `beforeEach`/`afterEach` if needed)
+7. Feature class (if needed)
+8. Explanation of browser-informed test
 
 Generate complete, working test files following these patterns exactly.

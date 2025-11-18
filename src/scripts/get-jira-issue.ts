@@ -6,6 +6,13 @@ import { join, relative } from "node:path";
 import ora from "ora";
 import { loadConfigSync } from "../config.js";
 import { loadEnvWithWarnings } from "../env.js";
+import {
+  extractConfluencePageIds,
+  extractLinkedResources,
+  getConfluencePage,
+  getJiraRemoteLinks,
+  type LinkedResource,
+} from "./get-confluence-page.js";
 import { filterPatch, getPRChanges } from "./get-pr-changes.js";
 
 // Helper function to convert absolute path to relative path
@@ -17,7 +24,7 @@ const getRelativePath = (absolutePath: string): string => {
 };
 
 const config = loadConfigSync();
-const { workspace, repo } = config.bitbucket;
+const { workspace, repo } = config.bitbucket || {};
 const { baseUrl: jiraBaseUrl } = config.jira;
 
 // Load and validate environment variables (shows warnings instead of errors)
@@ -26,10 +33,18 @@ const env = loadEnvWithWarnings([
   "JIRA_API_TOKEN",
   "BITBUCKET_EMAIL",
   "BITBUCKET_API_TOKEN",
+  "CONFLUENCE_EMAIL",
+  "CONFLUENCE_API_TOKEN",
 ]);
 
-const { JIRA_EMAIL, JIRA_API_TOKEN, BITBUCKET_EMAIL, BITBUCKET_API_TOKEN } =
-  env;
+const {
+  JIRA_EMAIL,
+  JIRA_API_TOKEN,
+  BITBUCKET_EMAIL,
+  BITBUCKET_API_TOKEN,
+  CONFLUENCE_EMAIL,
+  CONFLUENCE_API_TOKEN,
+} = env;
 
 const logError = (error: unknown, context: string) => {
   const testflowDir = join(process.cwd(), ".testflow");
@@ -1019,27 +1034,35 @@ const processIssue = async (issueIdOrKey: string) => {
   try {
     const issueData = await getJiraIssue({ issueIdOrKey });
 
-    // Try to fetch associated Bitbucket branch
+    // Try to fetch associated Bitbucket branch (only if configured)
     let branchInfo: BitbucketBranchInfo | null = null;
-    const branchSpinner = ora({
-      text: `Searching for Bitbucket branch for issue ${issueIdOrKey}`,
-      color: "white",
-    }).start();
-    try {
-      branchInfo = await getBitbucketBranch({ issueIdOrKey });
-      if (branchInfo) {
-        branchSpinner.succeed(
-          `Found branch: ${branchInfo.branchName || "N/A"}`
+    if (workspace && repo && BITBUCKET_EMAIL && BITBUCKET_API_TOKEN) {
+      const branchSpinner = ora({
+        text: `Searching for Bitbucket branch for issue ${issueIdOrKey}`,
+        color: "white",
+      }).start();
+      try {
+        branchInfo = await getBitbucketBranch({ issueIdOrKey });
+        if (branchInfo) {
+          branchSpinner.succeed(
+            `Found branch: ${branchInfo.branchName || "N/A"}`
+          );
+        } else {
+          branchSpinner.warn(chalk.yellow("No branch found for this issue"));
+        }
+      } catch (error) {
+        logError(
+          error,
+          `Failed to fetch Bitbucket branch for issue ${issueIdOrKey}`
         );
-      } else {
-        branchSpinner.warn(chalk.yellow("No branch found for this issue"));
+        branchSpinner.fail(chalk.red("Failed to fetch Bitbucket branch"));
       }
-    } catch (error) {
-      logError(
-        error,
-        `Failed to fetch Bitbucket branch for issue ${issueIdOrKey}`
+    } else {
+      console.log(
+        chalk.gray(
+          "⏭️  Skipping Bitbucket integration (missing configuration or credentials)"
+        )
       );
-      branchSpinner.fail(chalk.red("Failed to fetch Bitbucket branch"));
     }
 
     // Create output directory if it doesn't exist
@@ -1129,6 +1152,137 @@ const processIssue = async (issueIdOrKey: string) => {
       }
     }
 
+    // Extract and fetch linked resources (Jira issues and Confluence pages)
+    const linkedResourcesSpinner = ora({
+      text: `Extracting linked resources from issue ${issueIdOrKey}`,
+      color: "white",
+    }).start();
+
+    const linkedResources: LinkedResource[] = [];
+    const confluencePages: Array<{
+      pageId: string;
+      data: unknown;
+      textContent?: string;
+    }> = [];
+
+    try {
+      // Extract issue links from the issue data
+      const issueLinks = extractLinkedResources(issueData);
+      linkedResources.push(...issueLinks);
+
+      // Fetch remote links to get Confluence page IDs (only if Jira is configured)
+      if (JIRA_EMAIL && JIRA_API_TOKEN && jiraBaseUrl) {
+        const remoteLinks = await getJiraRemoteLinks(
+          issueIdOrKey,
+          jiraBaseUrl,
+          JIRA_EMAIL,
+          JIRA_API_TOKEN
+        );
+
+        // Extract Confluence page IDs from remote links
+        const confluencePageIds = extractConfluencePageIds(remoteLinks);
+
+        // Add Confluence pages to linked resources list
+        for (const pageId of confluencePageIds) {
+          linkedResources.push({
+            type: "confluence_page",
+            id: pageId,
+          });
+        }
+
+        // Fetch Confluence pages if credentials and config are available
+        if (confluencePageIds.length > 0) {
+          if (
+            CONFLUENCE_EMAIL &&
+            CONFLUENCE_API_TOKEN &&
+            config.confluence?.baseUrl
+          ) {
+            for (const pageId of confluencePageIds) {
+              try {
+                const pageData = await getConfluencePage({ pageId });
+                if (pageData.page) {
+                  confluencePages.push({
+                    pageId,
+                    data: pageData.page,
+                    textContent: pageData.textContent,
+                  });
+                }
+              } catch (error) {
+                logError(error, `Failed to fetch Confluence page ${pageId}`);
+              }
+            }
+          } else {
+            console.log(
+              chalk.gray(
+                `  ⏭️  Skipping Confluence page fetching (${confluencePageIds.length} page(s) found but missing configuration or credentials)`
+              )
+            );
+          }
+        }
+      }
+
+      // Save linked resources list
+      if (linkedResources.length > 0) {
+        const linkedResourcesPath = join(rawDir, "linked-resources.json");
+        try {
+          unlinkSync(linkedResourcesPath);
+        } catch {
+          // File doesn't exist, which is fine
+        }
+        writeFileSync(
+          linkedResourcesPath,
+          JSON.stringify(linkedResources, null, 2),
+          "utf-8"
+        );
+
+        // Save Confluence pages
+        if (confluencePages.length > 0) {
+          const confluenceDir = join(outputDir, "confluence");
+          mkdirSync(confluenceDir, { recursive: true });
+
+          for (const page of confluencePages) {
+            // Save JSON
+            const pageJsonPath = join(
+              confluenceDir,
+              `page-${page.pageId}.json`
+            );
+            writeFileSync(
+              pageJsonPath,
+              JSON.stringify(page.data, null, 2),
+              "utf-8"
+            );
+
+            // Save text content if available
+            if (page.textContent) {
+              const pageTextPath = join(
+                confluenceDir,
+                `page-${page.pageId}.txt`
+              );
+              writeFileSync(pageTextPath, page.textContent, "utf-8");
+            }
+          }
+
+          linkedResourcesSpinner.succeed(
+            `Found ${linkedResources.length} linked resources (${confluencePages.length} Confluence pages fetched)`
+          );
+        } else {
+          linkedResourcesSpinner.succeed(
+            `Found ${linkedResources.length} linked resources`
+          );
+        }
+      } else {
+        linkedResourcesSpinner.warn(chalk.yellow("No linked resources found"));
+      }
+    } catch (error) {
+      logError(
+        error,
+        `Failed to extract linked resources for issue ${issueIdOrKey}`
+      );
+      linkedResourcesSpinner.fail(
+        chalk.yellow("Failed to extract linked resources")
+      );
+    }
+
     // Create and save compact version for LLM context (plain text)
     const compactSpinner = ora({
       text: `Creating compact issue description`,
@@ -1140,6 +1294,42 @@ const processIssue = async (issueIdOrKey: string) => {
     compactSpinner.succeed(
       `Compact issue data saved to: ${getRelativePath(compactPath)}`
     );
+
+    // Add linked resources summary to the compact issue file
+    if (linkedResources.length > 0) {
+      const linkedResourcesSummary: string[] = [];
+      linkedResourcesSummary.push("\n---\n");
+      linkedResourcesSummary.push("Linked Resources:\n");
+
+      const jiraIssues = linkedResources.filter((r) => r.type === "jira_issue");
+      const confluencePagesList = linkedResources.filter(
+        (r) => r.type === "confluence_page"
+      );
+
+      if (jiraIssues.length > 0) {
+        linkedResourcesSummary.push("\nJira Issues:");
+        jiraIssues.forEach((issue) => {
+          linkedResourcesSummary.push(
+            `  - ${issue.id}${issue.title ? `: ${issue.title}` : ""}`
+          );
+        });
+      }
+
+      if (confluencePagesList.length > 0) {
+        linkedResourcesSummary.push("\nConfluence Pages:");
+        confluencePagesList.forEach((page) => {
+          linkedResourcesSummary.push(`  - Page ID: ${page.id}`);
+        });
+        linkedResourcesSummary.push(
+          `\nNote: ${confluencePages.length} Confluence page(s) fetched and saved to confluence/ directory.`
+        );
+      }
+
+      const updatedCompactIssue = `${compactIssue}\n${linkedResourcesSummary.join(
+        "\n"
+      )}`;
+      writeFileSync(compactPath, updatedCompactIssue, "utf-8");
+    }
 
     if (branchInfo) {
       console.log(`Branch found: ${branchInfo.branchName || "N/A"}`);
@@ -1182,7 +1372,7 @@ const main = async () => {
             message: "Enter board ID:",
           });
           boardId = parseInt(boardIdStr, 10);
-          if (isNaN(boardId)) {
+          if (Number.isNaN(boardId)) {
             console.error(chalk.red("Invalid board ID"));
             process.exit(1);
           }

@@ -15,10 +15,7 @@ const version = packageJson.version || "1.0.0";
 
 const program = new Command();
 
-program
-  .name("testflow")
-  .description("Framework for testing and automation")
-  .version(version);
+program.name("testflow").description("Framework for testing and automation").version(version);
 
 const runNodeScript = (scriptPath: string, args: string[] = []): void => {
   // Use .js extension for built files, fallback to .ts for development
