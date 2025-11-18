@@ -1,33 +1,32 @@
 {
   "name": "testflow",
-  "version": "0.2.0",
-  "description": "Framework for automating testing with Playwright and AI",
-  "author": "Bitrock",
-  "main": "electron/main.js",
+  "version": "1.0.0",
+  "description": "Framework for testing and automation",
+  "main": "src/index.ts",
   "scripts": {
-    "start": "electron .",
-    "dev": "ELECTRON_DEV=1 concurrently \"vite --cwd renderer\" \"electron .\"",
-    "build:renderer": "cd renderer && vite build",
-    "build": "npm run build:renderer && electron-builder",
-    "prestart": "npm run build:renderer"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "get-jira-issue": "bun run scripts/get-jira-issue.ts",
+    "get-pr-changes": "bun run scripts/get-pr-changes.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davide97g/testflow.git"
+  },
+  "keywords": [],
+  "author": "Davide Ghiotto",
+  "license": "MIT",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/davide97g/testflow/issues"
+  },
+  "homepage": "https://github.com/davide97g/testflow#readme",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
-    "axios": "^1.4.0",
-    "express": "^4.18.2",
-    "open": "^8.4.0",
-    "cross-spawn": "^7.0.5",
-    "playwright": "^1.40.0"
-  },
-  "devDependencies": {
-    "electron": "^26.0.0",
-    "concurrently": "^8.0.0",
-    "vite": "^5.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "@vitejs/plugin-react": "^4.2.1",
-    "tailwindcss": "^3.4.0",
-    "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.32",
-    "electron-builder": "^24.9.1"
+    "axios": "^1.13.2"
   }
 }

@@ -1,12 +1,25 @@
-node_modules/
-dist/
-renderer/dist/
-*.log
-.DS_Store
 .env
-.env.local
-*.png
-screenshot-*.png
-playwright-report/
-test-results/
 
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/e2e/junit/
+/junit/
+
+node_modules/
+
+/har/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/e2e/junit/
+.yarn/install-state.gz
+.DS_Store
+
+output/
+
+config.json
