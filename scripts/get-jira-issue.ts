@@ -1,3 +1,4 @@
+import { input, select } from "@inquirer/prompts";
 import axios from "axios";
 import chalk from "chalk";
 import {
@@ -548,6 +549,318 @@ export const getBitbucketBranch = async ({
   return null;
 };
 
+/**
+ * Check if there's an open PR for a given issue
+ * Returns true if an OPEN PR is found, false otherwise
+ */
+const hasOpenPR = async (issueIdOrKey: string): Promise<boolean> => {
+  if (!workspace || !repo || !BITBUCKET_EMAIL || !BITBUCKET_API_TOKEN) {
+    return false;
+  }
+
+  try {
+    const BITBUCKET_BASE_URL = "https://api.bitbucket.org/2.0";
+    const auth = Buffer.from(
+      `${BITBUCKET_EMAIL}:${BITBUCKET_API_TOKEN}`
+    ).toString("base64");
+    const headers = {
+      Authorization: `Basic ${auth}`,
+      Accept: "application/json",
+    };
+
+    const ticketPattern = new RegExp(
+      issueIdOrKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      "i"
+    );
+
+    // Only check OPEN PRs
+    const prsUrl = `${BITBUCKET_BASE_URL}/repositories/${workspace}/${repo}/pullrequests?state=OPEN&pagelen=50`;
+    const prsResponse = await axios.get(prsUrl, { headers });
+    const prsData = prsResponse.data as {
+      values?: Array<{
+        id?: number;
+        title?: string;
+        description?: string;
+        source?: { branch?: { name?: string } };
+      }>;
+      next?: string;
+    };
+
+    if (prsData.values) {
+      for (const pr of prsData.values) {
+        const titleMatch = pr.title && ticketPattern.test(pr.title);
+        const descMatch = pr.description && ticketPattern.test(pr.description);
+        const branchMatch =
+          pr.source?.branch?.name && ticketPattern.test(pr.source.branch.name);
+
+        if (titleMatch || descMatch || branchMatch) {
+          return true;
+        }
+      }
+    }
+
+    // Handle pagination
+    let nextUrl = prsData.next;
+    while (nextUrl) {
+      try {
+        const nextResponse = await axios.get(nextUrl, { headers });
+        const nextData = nextResponse.data as {
+          values?: Array<{
+            id?: number;
+            title?: string;
+            description?: string;
+            source?: { branch?: { name?: string } };
+          }>;
+          next?: string;
+        };
+
+        if (nextData.values) {
+          for (const pr of nextData.values) {
+            const titleMatch = pr.title && ticketPattern.test(pr.title);
+            const descMatch =
+              pr.description && ticketPattern.test(pr.description);
+            const branchMatch =
+              pr.source?.branch?.name &&
+              ticketPattern.test(pr.source.branch.name);
+
+            if (titleMatch || descMatch || branchMatch) {
+              return true;
+            }
+          }
+        }
+
+        nextUrl = nextData.next;
+      } catch {
+        break;
+      }
+    }
+  } catch (error) {
+    // Silently fail - return false if we can't check
+    logError(error, `Failed to check open PR for issue ${issueIdOrKey}`);
+  }
+
+  return false;
+};
+
+interface CompactIssue {
+  key: string;
+  title: string;
+  status: string;
+  prOpen: "Y" | "N";
+}
+
+interface GetIssuesByStatusParams {
+  boardId?: number;
+  assignee?: string;
+  statuses: string[];
+  titleMaxLength?: number;
+}
+
+/**
+ * Fetch all issues that belong to specific statuses, optionally filtered by board and assignee
+ * Returns a compact list with: issue key - issue title (max N chars) - status - PR open (Y/N)
+ */
+export const getIssuesByStatus = async ({
+  boardId,
+  assignee,
+  statuses,
+  titleMaxLength = 60,
+}: GetIssuesByStatusParams): Promise<CompactIssue[]> => {
+  const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString(
+    "base64"
+  );
+
+  const headers = {
+    Authorization: `Basic ${auth}`,
+    Accept: "application/json",
+  };
+
+  let normalizedBaseUrl = jiraBaseUrl.trim().replace(/\/+$/, "");
+  normalizedBaseUrl = normalizedBaseUrl.replace(/\/rest\/api\/[23]$/, "");
+
+  const spinner = ora({
+    text: `Fetching issues...`,
+    color: "white",
+  }).start();
+
+  const issues: CompactIssue[] = [];
+  let startAt = 0;
+  const maxResults = 50;
+  let hasMore = true;
+
+  try {
+    // Build JQL query for filtering
+    const jqlParts: string[] = [];
+
+    // Add assignee filter if provided
+    if (assignee) {
+      jqlParts.push(`assignee = "${assignee}"`);
+    }
+
+    // Add status filter
+    if (statuses.length > 0) {
+      const statusQueries = statuses.map((status) => `"${status}"`).join(", ");
+      jqlParts.push(`status IN (${statusQueries})`);
+    }
+
+    const jql = jqlParts.length > 0 ? jqlParts.join(" AND ") : "ORDER BY key";
+
+    // Use Agile API if boardId is provided, otherwise use Search API
+    if (boardId) {
+      spinner.text = `Fetching issues from board ${boardId}...`;
+
+      while (hasMore) {
+        const boardUrl = `${normalizedBaseUrl}/rest/agile/1.0/board/${boardId}/issue?jql=${encodeURIComponent(
+          jql
+        )}&startAt=${startAt}&maxResults=${maxResults}&fields=key,summary,status`;
+
+        const response = await axios.get(boardUrl, { headers });
+        const data = response.data as {
+          issues?: Array<{
+            key?: string;
+            fields?: {
+              summary?: string;
+              status?: { name?: string };
+            };
+          }>;
+          total?: number;
+          startAt?: number;
+          maxResults?: number;
+        };
+
+        if (!data.issues || data.issues.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        spinner.text = `Processing ${data.issues.length} issues (${
+          startAt + data.issues.length
+        }/${data.total || 0})`;
+
+        // Process issues in parallel
+        const issuePromises = data.issues.map(async (issue) => {
+          const key = issue.key || "";
+          const title = issue.fields?.summary || "";
+          const status = issue.fields?.status?.name || "";
+
+          // Truncate title if needed
+          const truncatedTitle =
+            title.length > titleMaxLength
+              ? `${title.substring(0, titleMaxLength)}...`
+              : title;
+
+          // Check for open PR
+          const hasOpenPRValue = await hasOpenPR(key);
+
+          return {
+            key,
+            title: truncatedTitle,
+            status,
+            prOpen: (hasOpenPRValue ? "Y" : "N") as "Y" | "N",
+          };
+        });
+
+        const processedIssues = await Promise.all(issuePromises);
+        issues.push(...processedIssues);
+
+        // Check if there are more results
+        if (data.issues.length < maxResults) {
+          hasMore = false;
+        } else {
+          startAt += maxResults;
+        }
+      }
+    } else {
+      // Use Search API when no board is specified
+      spinner.text = `Fetching issues with JQL: ${jql}`;
+
+      while (hasMore) {
+        const searchUrl = `${normalizedBaseUrl}/rest/api/3/search?jql=${encodeURIComponent(
+          jql
+        )}&startAt=${startAt}&maxResults=${maxResults}&fields=key,summary,status`;
+
+        const response = await axios.get(searchUrl, { headers });
+        const data = response.data as {
+          issues?: Array<{
+            key?: string;
+            fields?: {
+              summary?: string;
+              status?: { name?: string };
+            };
+          }>;
+          total?: number;
+          startAt?: number;
+          maxResults?: number;
+        };
+
+        if (!data.issues || data.issues.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        spinner.text = `Processing ${data.issues.length} issues (${
+          startAt + data.issues.length
+        }/${data.total || 0})`;
+
+        // Process issues in parallel
+        const issuePromises = data.issues.map(async (issue) => {
+          const key = issue.key || "";
+          const title = issue.fields?.summary || "";
+          const status = issue.fields?.status?.name || "";
+
+          // Truncate title if needed
+          const truncatedTitle =
+            title.length > titleMaxLength
+              ? `${title.substring(0, titleMaxLength)}...`
+              : title;
+
+          // Check for open PR
+          const hasOpenPRValue = await hasOpenPR(key);
+
+          return {
+            key,
+            title: truncatedTitle,
+            status,
+            prOpen: hasOpenPRValue ? ("Y" as const) : ("N" as const),
+          };
+        });
+
+        const processedIssues = await Promise.all(issuePromises);
+        issues.push(...processedIssues);
+
+        // Check if there are more results
+        if (data.issues.length < maxResults) {
+          hasMore = false;
+        } else {
+          startAt += maxResults;
+        }
+      }
+    }
+
+    spinner.succeed(`Fetched ${issues.length} issues`);
+    return issues;
+  } catch (error) {
+    logError(error, `Failed to fetch issues`);
+    spinner.fail(chalk.red("Failed to fetch issues"));
+
+    if (axios.isAxiosError(error)) {
+      if (error.response?.status === 401) {
+        console.error(chalk.red("❌ Authentication failed"));
+        process.exit(1);
+      } else if (error.response?.status === 403) {
+        console.error(chalk.red("❌ Access forbidden"));
+        process.exit(1);
+      } else if (error.response?.status === 404) {
+        if (boardId) {
+          console.error(chalk.red(`❌ Board ${boardId} not found`));
+        }
+      }
+    }
+
+    throw error;
+  }
+};
+
 const createCompactIssue = (issueData: {
   issue?: unknown;
   changelog?: unknown;
@@ -715,22 +1028,10 @@ const createCompactIssue = (issueData: {
   return lines.join("\n");
 };
 
-// bun run get-jira-issue.ts BAT-2076
-const main = async () => {
-  // Get issue ID or key from command line arguments
-  // Usage: bun run get-jira-issue.ts <issueIdOrKey>
-  // Example: bun run get-jira-issue.ts PROJ-123
-  const issueIdOrKey = process.argv[2];
-
-  if (!issueIdOrKey) {
-    console.error(chalk.red("Error: Issue ID or key is required"));
-    console.error(
-      chalk.yellow("Usage: bun run get-jira-issue.ts <issueIdOrKey>")
-    );
-    console.error(chalk.yellow("Example: bun run get-jira-issue.ts PROJ-123"));
-    process.exit(1);
-  }
-
+/**
+ * Process a single Jira issue: fetch data, branch info, PR changes, and save to output
+ */
+const processIssue = async (issueIdOrKey: string) => {
   try {
     const issueData = await getJiraIssue({ issueIdOrKey });
 
@@ -863,6 +1164,115 @@ const main = async () => {
     logError(error, `Failed to fetch Jira issue ${issueIdOrKey}`);
     console.error(chalk.red("❌ Failed to fetch Jira issue"));
     process.exit(1);
+  }
+};
+
+// bun run get-jira-issue.ts BAT-2076
+// bun run extract (interactive mode)
+const main = async () => {
+  // Get issue ID or key from command line arguments
+  // Usage: bun run get-jira-issue.ts <issueIdOrKey>
+  // Example: bun run get-jira-issue.ts PROJ-123
+  const issueIdOrKey = process.argv[2];
+
+  // If no issue ID provided, use interactive mode
+  if (!issueIdOrKey) {
+    try {
+      // Ask for board ID (optional)
+      const boardIdInput = await select({
+        message: "Do you want to filter by a specific board?",
+        choices: [
+          { name: "No, search all issues", value: "none" },
+          { name: "Yes, enter board ID", value: "yes" },
+        ],
+      });
+
+      let boardId: number | undefined;
+      if (boardIdInput === "yes") {
+        const boardIdStr = await input({
+          message: "Enter board ID:",
+        });
+        boardId = parseInt(boardIdStr, 10);
+        if (isNaN(boardId)) {
+          console.error(chalk.red("Invalid board ID"));
+          process.exit(1);
+        }
+      }
+
+      // Ask for assignee (optional)
+      const assigneeInput = await select({
+        message: "Do you want to filter by assignee?",
+        choices: [
+          { name: "No, all assignees", value: "none" },
+          { name: "Yes, enter username/email", value: "yes" },
+        ],
+      });
+
+      let assignee: string | undefined;
+      if (assigneeInput === "yes") {
+        assignee = await input({
+          message: "Enter assignee (username or email):",
+        });
+      }
+
+      // Ask for statuses
+      const statusesInput = await input({
+        message:
+          "Enter statuses (comma-separated, e.g., 'To Do,In Progress,Pull Requested'):",
+        default: "To Do,In Progress,Pull Requested,Dev Release",
+      });
+
+      const statuses = statusesInput
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (statuses.length === 0) {
+        console.error(chalk.red("At least one status is required"));
+        process.exit(1);
+      }
+
+      // Fetch issues
+      console.log(chalk.blue("\nFetching issues..."));
+      const issues = await getIssuesByStatus({
+        boardId,
+        assignee,
+        statuses,
+        titleMaxLength: 60,
+      });
+
+      if (issues.length === 0) {
+        console.log(chalk.yellow("No issues found matching the criteria"));
+        process.exit(0);
+      }
+
+      // Show interactive list
+      const selectedIssue = await select({
+        message: "Select a Jira issue:",
+        choices: issues.map((issue) => ({
+          name: `${issue.key} - ${issue.title} [${issue.status}] ${
+            issue.prOpen === "Y" ? "🔵 PR Open" : ""
+          }`,
+          value: issue.key,
+        })),
+      });
+
+      // Process the selected issue
+      await processIssue(selectedIssue);
+    } catch (error) {
+      if (error && typeof error === "object" && "message" in error) {
+        if (error.message === "User force closed the prompt with ctrl+c") {
+          console.log(chalk.yellow("\nCancelled by user"));
+          process.exit(0);
+        }
+      }
+      logError(error, "Failed in interactive mode");
+      console.error(chalk.red("❌ Failed to fetch issues"));
+      process.exit(1);
+    }
+  } else {
+    // Direct mode: process the provided issue
+    await processIssue(issueIdOrKey);
   }
 };
 
