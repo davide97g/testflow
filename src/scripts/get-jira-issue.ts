@@ -4,8 +4,8 @@ import chalk from "chalk";
 import { appendFileSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ora from "ora";
-import { loadConfigSync } from "../src/config.js";
-import { loadEnvWithWarnings } from "../src/env.js";
+import { loadConfigSync } from "../config.js";
+import { loadEnvWithWarnings } from "../env.js";
 import { filterPatch, getPRChanges } from "./get-pr-changes.js";
 
 // Helper function to convert absolute path to relative path
@@ -28,7 +28,8 @@ const env = loadEnvWithWarnings([
   "BITBUCKET_API_TOKEN",
 ]);
 
-const { JIRA_EMAIL, JIRA_API_TOKEN, BITBUCKET_EMAIL, BITBUCKET_API_TOKEN } = env;
+const { JIRA_EMAIL, JIRA_API_TOKEN, BITBUCKET_EMAIL, BITBUCKET_API_TOKEN } =
+  env;
 
 const logError = (error: unknown, context: string) => {
   const logPath = join(process.cwd(), "testflow.log");

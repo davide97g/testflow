@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-import { confirm, input } from "@inquirer/prompts";
+import { confirm, input, select } from "@inquirer/prompts";
 import chalk from "chalk";
 import figlet from "figlet";
-import fs from "fs-extra";
 import gradient from "gradient-string";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ora from "ora";
@@ -33,7 +33,7 @@ interface PackageJson {
 const runBanner = async (): Promise<void> => {
   return new Promise((resolve) => {
     const packageJsonPath = path.join(__dirname, "..", "package.json");
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
     const version = packageJson.version || "1.0.0";
 
     figlet.text(
@@ -94,8 +94,8 @@ const loadDefaults = async (): Promise<Partial<InitAnswers>> => {
   // Try to read package.json for repo name
   const pkgPath = path.join(process.cwd(), "package.json");
   try {
-    if (await fs.pathExists(pkgPath)) {
-      const pkg = (await fs.readJson(pkgPath)) as PackageJson;
+    if (existsSync(pkgPath)) {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as PackageJson;
       if (pkg.name && !defaults.repo) {
         defaults.repo = pkg.name.trim();
       }
@@ -270,7 +270,7 @@ const writeConfig = async (answers: InitAnswers): Promise<void> => {
       },
     };
 
-    await fs.writeJson(configPath, config, { spaces: 2 });
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
     configSpinner.succeed(
       `Configuration saved to ${path.relative(process.cwd(), configPath)}`
     );
@@ -280,6 +280,112 @@ const writeConfig = async (answers: InitAnswers): Promise<void> => {
       chalk.red(error instanceof Error ? error.message : String(error))
     );
     process.exit(1);
+  }
+};
+
+const getEditorConfig = (
+  editor: string
+): { filePath: string; fileName: string } => {
+  const cwd = process.cwd();
+
+  switch (editor) {
+    case "Cursor":
+      return {
+        filePath: cwd,
+        fileName: ".cursorrules",
+      };
+    case "GitHub Copilot":
+      return {
+        filePath: path.join(cwd, ".github"),
+        fileName: "copilot-instructions.md",
+      };
+    case "Codeium":
+      return {
+        filePath: path.join(cwd, ".codeium"),
+        fileName: "instructions.md",
+      };
+    case "Other":
+      return {
+        filePath: cwd,
+        fileName: "testflow.mdc",
+      };
+    default:
+      return {
+        filePath: cwd,
+        fileName: "testflow.mdc",
+      };
+  }
+};
+
+const createEditorRule = async (): Promise<void> => {
+  const shouldCreateRule = await confirm({
+    message: "Do you want to create an AI editor rule file?",
+    default: true,
+  });
+
+  if (!shouldCreateRule) {
+    return;
+  }
+
+  console.log(chalk.cyan("\n🤖 AI Editor Configuration"));
+  console.log(chalk.gray("─".repeat(40)));
+
+  const editor = await select({
+    message: "Which AI Editor are you using?",
+    choices: [
+      { name: "Cursor", value: "Cursor" },
+      { name: "GitHub Copilot", value: "GitHub Copilot" },
+      { name: "Codeium", value: "Codeium" },
+      { name: "Other", value: "Other" },
+    ],
+  });
+
+  const { filePath, fileName } = getEditorConfig(editor);
+  const ruleFilePath = path.join(filePath, fileName);
+
+  // Read the prompt file - try multiple possible locations
+  // 1. In dist folder (when running from installed package - same dir as init.js)
+  // 2. In prompts folder (when running from source)
+  let promptContent: string;
+  const distPromptPath = path.join(__dirname, "llm-prompt.md"); // dist/llm-prompt.md (installed package)
+  const sourcePromptPath = path.join(__dirname, "prompts", "llm-prompt.md"); // prompts/llm-prompt.md (source)
+
+  let foundPath: string | null = null;
+  if (existsSync(distPromptPath)) {
+    foundPath = distPromptPath;
+  } else if (existsSync(sourcePromptPath)) {
+    foundPath = sourcePromptPath;
+  }
+
+  if (!foundPath) {
+    console.error(chalk.red("Could not find llm-prompt.md file"));
+    console.error(chalk.gray(`Tried: ${distPromptPath}`));
+    console.error(chalk.gray(`Tried: ${sourcePromptPath}`));
+    return;
+  }
+
+  promptContent = readFileSync(foundPath, "utf-8");
+
+  const ruleSpinner = ora({
+    text: `Creating ${fileName}...`,
+    color: "yellow",
+  }).start();
+
+  try {
+    // Ensure directory exists
+    mkdirSync(filePath, { recursive: true });
+
+    // Write the rule file
+    writeFileSync(ruleFilePath, promptContent, "utf-8");
+
+    ruleSpinner.succeed(
+      `${fileName} created at ${path.relative(process.cwd(), ruleFilePath)}`
+    );
+  } catch (error) {
+    ruleSpinner.fail(`Failed to create ${fileName}`);
+    console.error(
+      chalk.red(error instanceof Error ? error.message : String(error))
+    );
   }
 };
 
@@ -322,7 +428,10 @@ const runInit = async (): Promise<void> => {
   // 4. Write configuration file
   await writeConfig(answers);
 
-  // 5. Success message
+  // 5. Create AI editor rule file
+  await createEditorRule();
+
+  // 6. Success message
   console.log("\n");
   console.log(dynamicGradient("Setup complete."));
   console.log(

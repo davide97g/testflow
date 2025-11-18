@@ -1,5 +1,4 @@
-import fs from "fs-extra";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 
@@ -36,14 +35,14 @@ export type Config = z.infer<typeof configSchema>;
 export const loadConfig = async (configPath?: string): Promise<Config> => {
   const configFilePath = configPath || path.join(process.cwd(), "config.json");
 
-  if (!(await fs.pathExists(configFilePath))) {
+  if (!existsSync(configFilePath)) {
     throw new Error(
       `Configuration file not found at ${configFilePath}. Please run 'testflow init' to create it.`
     );
   }
 
   try {
-    const configData = await fs.readJson(configFilePath);
+    const configData = JSON.parse(readFileSync(configFilePath, "utf8"));
     const validatedConfig = configSchema.parse(configData);
     return validatedConfig;
   } catch (error) {
