@@ -103,7 +103,7 @@ program
   .description("Retrieve Zephyr test cases for a project")
   .argument(
     "[projectKey]",
-    "Zephyr project ID or key (optional, will use ZEPHYR_PROJECT_KEY from env if not provided)"
+    "Zephyr project key (optional, will use config file or ZEPHYR_PROJECT_KEY env var if not provided)"
   )
   .action((projectKey?: string) => {
     const args = projectKey ? [projectKey] : [];
