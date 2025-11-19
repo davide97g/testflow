@@ -16,6 +16,7 @@
     "extract": "bun run src/index.ts extract",
     "extract:jira": "bun run src/index.ts extract",
     "extract:pr": "bun run src/index.ts extract:pr",
+    "zephyr": "bun run src/index.ts zephyr",
     "init": "bun run src/index.ts init",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",

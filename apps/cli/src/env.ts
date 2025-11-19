@@ -28,6 +28,22 @@ export const envSchema = z.object({
     .string()
     .min(1, "CONFLUENCE_API_TOKEN is required")
     .optional(),
+  ZEPHYR_PROJECT_KEY: z
+    .string()
+    .min(1, "ZEPHYR_PROJECT_KEY is required")
+    .optional(),
+  ZEPHYR_BASE_URL: z
+    .string()
+    .url("ZEPHYR_BASE_URL must be a valid URL")
+    .optional(),
+  ZEPHYR_ACCESS_TOKEN: z
+    .string()
+    .min(1, "ZEPHYR_ACCESS_TOKEN is required")
+    .optional(),
+  ZEPHYR_FOLDER_ID: z
+    .string()
+    .min(1, "ZEPHYR_FOLDER_ID is required")
+    .optional(),
 });
 
 /**
@@ -53,6 +69,10 @@ export const loadEnv = (): Env => {
     BITBUCKET_API_TOKEN: process.env.BITBUCKET_API_TOKEN,
     CONFLUENCE_EMAIL: process.env.CONFLUENCE_EMAIL,
     CONFLUENCE_API_TOKEN: process.env.CONFLUENCE_API_TOKEN,
+    ZEPHYR_PROJECT_KEY: process.env.ZEPHYR_PROJECT_KEY,
+    ZEPHYR_BASE_URL: process.env.ZEPHYR_BASE_URL,
+    ZEPHYR_ACCESS_TOKEN: process.env.ZEPHYR_ACCESS_TOKEN,
+    ZEPHYR_FOLDER_ID: process.env.ZEPHYR_FOLDER_ID,
   };
 
   try {
@@ -102,6 +122,10 @@ export const loadEnvWithWarnings = (
     BITBUCKET_API_TOKEN: process.env.BITBUCKET_API_TOKEN,
     CONFLUENCE_EMAIL: process.env.CONFLUENCE_EMAIL,
     CONFLUENCE_API_TOKEN: process.env.CONFLUENCE_API_TOKEN,
+    ZEPHYR_PROJECT_KEY: process.env.ZEPHYR_PROJECT_KEY,
+    ZEPHYR_BASE_URL: process.env.ZEPHYR_BASE_URL,
+    ZEPHYR_ACCESS_TOKEN: process.env.ZEPHYR_ACCESS_TOKEN,
+    ZEPHYR_FOLDER_ID: process.env.ZEPHYR_FOLDER_ID,
   };
 
   const missingVars: Array<keyof Env> = [];
@@ -124,6 +148,17 @@ export const loadEnvWithWarnings = (
           invalidVars.push({
             name: varName,
             message: "must be a valid email address",
+          });
+        }
+      }
+      // Validate URL format for URL variables
+      if (varName === "ZEPHYR_BASE_URL") {
+        try {
+          new URL(value);
+        } catch {
+          invalidVars.push({
+            name: varName,
+            message: "must be a valid URL",
           });
         }
       }
@@ -165,8 +200,17 @@ export const loadEnvWithWarnings = (
       missingVars.includes("CONFLUENCE_API_TOKEN") ||
       invalidVars.some((v) => v.name === "CONFLUENCE_EMAIL");
 
+    const missingZephyr =
+      !env.ZEPHYR_PROJECT_KEY ||
+      !env.ZEPHYR_BASE_URL ||
+      !env.ZEPHYR_ACCESS_TOKEN ||
+      missingVars.includes("ZEPHYR_PROJECT_KEY") ||
+      missingVars.includes("ZEPHYR_BASE_URL") ||
+      missingVars.includes("ZEPHYR_ACCESS_TOKEN") ||
+      invalidVars.some((v) => v.name === "ZEPHYR_BASE_URL");
+
     // Show integration status
-    if (missingBitbucket || missingConfluence) {
+    if (missingBitbucket || missingConfluence || missingZephyr) {
       console.warn(chalk.yellow("\n⚠️  Integration Status:"));
       if (missingBitbucket) {
         console.warn(
@@ -179,6 +223,13 @@ export const loadEnvWithWarnings = (
         console.warn(
           chalk.yellow(
             "  • Confluence integration: SKIPPED (missing CONFLUENCE_EMAIL or CONFLUENCE_API_TOKEN)"
+          )
+        );
+      }
+      if (missingZephyr) {
+        console.warn(
+          chalk.yellow(
+            "  • Zephyr integration: SKIPPED (missing ZEPHYR_PROJECT_KEY, ZEPHYR_BASE_URL, or ZEPHYR_ACCESS_TOKEN)"
           )
         );
       }
@@ -199,6 +250,12 @@ export const loadEnvWithWarnings = (
       missingVars.includes("CONFLUENCE_API_TOKEN") ||
       invalidVars.some((v) => v.name === "CONFLUENCE_EMAIL");
 
+    const needsZephyr =
+      missingVars.includes("ZEPHYR_PROJECT_KEY") ||
+      missingVars.includes("ZEPHYR_BASE_URL") ||
+      missingVars.includes("ZEPHYR_ACCESS_TOKEN") ||
+      invalidVars.some((v) => v.name === "ZEPHYR_BASE_URL");
+
     if (needsJira) {
       console.warn(
         chalk.yellow("  • JIRA API Token: docs/JIRA_API_TOKEN_GUIDE.md")
@@ -216,6 +273,11 @@ export const loadEnvWithWarnings = (
         chalk.yellow(
           "  • Confluence API Token: docs/CONFLUENCE_API_TOKEN_GUIDE.md (if available)"
         )
+      );
+    }
+    if (needsZephyr) {
+      console.warn(
+        chalk.yellow("  • Zephyr API Token: docs/ZEPHYR_API_TOKEN_GUIDE.md")
       );
     }
 

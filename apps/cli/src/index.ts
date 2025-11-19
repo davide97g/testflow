@@ -98,4 +98,16 @@ program
     runNodeScript("./src/scripts/get-pr-changes.ts", [prId]);
   });
 
+program
+  .command("zephyr")
+  .description("Retrieve Zephyr test cases for a project")
+  .argument(
+    "[projectKey]",
+    "Zephyr project ID or key (optional, will use ZEPHYR_PROJECT_KEY from env if not provided)"
+  )
+  .action((projectKey?: string) => {
+    const args = projectKey ? [projectKey] : [];
+    runNodeScript("./src/scripts/get-zephyr-testcases.ts", args);
+  });
+
 program.parse(process.argv);
