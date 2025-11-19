@@ -44,6 +44,14 @@ export const envSchema = z.object({
     .string()
     .min(1, "ZEPHYR_FOLDER_ID is required")
     .optional(),
+  ZEPHYR_PROJECT_ID: z
+    .string()
+    .min(1, "ZEPHYR_PROJECT_ID is required")
+    .optional(),
+  ZEPHYR_CONNECT_BASE_URL: z
+    .string()
+    .url("ZEPHYR_CONNECT_BASE_URL must be a valid URL")
+    .optional(),
 });
 
 /**
@@ -73,6 +81,8 @@ export const loadEnv = (): Env => {
     ZEPHYR_BASE_URL: process.env.ZEPHYR_BASE_URL,
     ZEPHYR_ACCESS_TOKEN: process.env.ZEPHYR_ACCESS_TOKEN,
     ZEPHYR_FOLDER_ID: process.env.ZEPHYR_FOLDER_ID,
+    ZEPHYR_PROJECT_ID: process.env.ZEPHYR_PROJECT_ID,
+    ZEPHYR_CONNECT_BASE_URL: process.env.ZEPHYR_CONNECT_BASE_URL,
   };
 
   try {
@@ -126,6 +136,8 @@ export const loadEnvWithWarnings = (
     ZEPHYR_BASE_URL: process.env.ZEPHYR_BASE_URL,
     ZEPHYR_ACCESS_TOKEN: process.env.ZEPHYR_ACCESS_TOKEN,
     ZEPHYR_FOLDER_ID: process.env.ZEPHYR_FOLDER_ID,
+    ZEPHYR_PROJECT_ID: process.env.ZEPHYR_PROJECT_ID,
+    ZEPHYR_CONNECT_BASE_URL: process.env.ZEPHYR_CONNECT_BASE_URL,
   };
 
   const missingVars: Array<keyof Env> = [];

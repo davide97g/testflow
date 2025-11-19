@@ -4,6 +4,16 @@ import { appendFileSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ora from "ora";
 import { loadEnvWithWarnings } from "../env.js";
+import type {
+  DetailedTestCase,
+  GetZephyrTestCasesParams,
+  ZephyrExecution,
+  ZephyrExecutionsResponse,
+  ZephyrTestCase,
+  ZephyrTestCasesResponse,
+  ZephyrTestStep,
+  ZephyrTestStepsResponse,
+} from "./zephyr-types.js";
 
 // Helper function to convert absolute path to relative path
 const getRelativePath = (absolutePath: string): string => {
@@ -19,6 +29,8 @@ loadEnvWithWarnings([
   "ZEPHYR_BASE_URL",
   "ZEPHYR_ACCESS_TOKEN",
   "ZEPHYR_FOLDER_ID",
+  "ZEPHYR_PROJECT_ID",
+  "ZEPHYR_CONNECT_BASE_URL",
 ]);
 
 // Access environment variables directly
@@ -26,6 +38,8 @@ const ZEPHYR_PROJECT_KEY = process.env.ZEPHYR_PROJECT_KEY;
 const ZEPHYR_BASE_URL = process.env.ZEPHYR_BASE_URL;
 const ZEPHYR_ACCESS_TOKEN = process.env.ZEPHYR_ACCESS_TOKEN;
 const ZEPHYR_FOLDER_ID = process.env.ZEPHYR_FOLDER_ID;
+const ZEPHYR_PROJECT_ID = process.env.ZEPHYR_PROJECT_ID;
+const ZEPHYR_CONNECT_BASE_URL = process.env.ZEPHYR_CONNECT_BASE_URL;
 
 const logError = (error: unknown, context: string) => {
   const testflowDir = join(process.cwd(), ".testflow");
@@ -65,40 +79,307 @@ const logError = (error: unknown, context: string) => {
   appendFileSync(logPath, logEntry, "utf-8");
 };
 
-interface ZephyrTestCase {
-  id?: number;
-  key?: string;
-  name?: string;
-  projectKey?: string;
-  status?: {
-    id?: number;
-    name?: string;
-  };
-  priority?: {
-    id?: number;
-    name?: string;
-  };
-  type?: {
-    id?: number;
-    name?: string;
-  };
-  createdOn?: string;
-  updatedOn?: string;
-  [key: string]: unknown;
-}
+/**
+ * Get base URL for Zephyr Connect API v2 (for detailed endpoints like teststeps, links, executions)
+ */
+const getZephyrConnectV2BaseUrl = (): string => {
+  if (!ZEPHYR_CONNECT_BASE_URL) {
+    throw new Error(
+      "ZEPHYR_CONNECT_BASE_URL is required for fetching detailed test case information"
+    );
+  }
+  let baseUrl = ZEPHYR_CONNECT_BASE_URL.trim().replace(/\/+$/, "");
 
-interface ZephyrTestCasesResponse {
-  values?: ZephyrTestCase[];
-  maxResults?: number;
-  startAt?: number;
-  total?: number;
-  isLast?: boolean;
-}
+  // Ensure we have /v2 in the path
+  if (!baseUrl.endsWith("/v2")) {
+    // Remove any existing /v2 path if present (we'll add it)
+    baseUrl = baseUrl.replace(/\/v2$/, "");
+    // Ensure we have /v2 in the path
+    baseUrl = `${baseUrl}/v2`;
+  }
 
-interface GetZephyrTestCasesParams {
-  projectKey: string;
-  folderId?: string;
-}
+  return baseUrl;
+};
+
+/**
+ * Get test steps for a test case
+ *
+ * cURL example:
+ * curl -X GET \
+ *   'https://prod-play.zephyr4jiracloud.com/connect/v2/testcases/{testCaseKey}/teststeps' \
+ *   -H 'Authorization: Bearer YOUR_TOKEN' \
+ *   -H 'Accept: application/json'
+ */
+const getTestSteps = async (testCaseKey: string): Promise<ZephyrTestStep[]> => {
+  if (!ZEPHYR_CONNECT_BASE_URL || !ZEPHYR_ACCESS_TOKEN || !testCaseKey) {
+    return [];
+  }
+
+  try {
+    const baseUrl = getZephyrConnectV2BaseUrl();
+    const headers = {
+      Authorization: `Bearer ${ZEPHYR_ACCESS_TOKEN}`,
+      Accept: "application/json",
+    };
+
+    // Use v2 API endpoint: /v2/testcases/{testCaseKey}/teststeps
+    const url = `${baseUrl}/testcases/${testCaseKey}/teststeps`;
+    const response = await axios.get<ZephyrTestStepsResponse>(url, {
+      headers,
+    });
+
+    if (response.data.values) {
+      return response.data.values;
+    }
+
+    // Fallback: check if response is directly an array
+    if (Array.isArray(response.data)) {
+      return response.data as ZephyrTestStep[];
+    }
+
+    return [];
+  } catch (error) {
+    // Log but don't fail - some test cases might not have steps
+    if (axios.isAxiosError(error) && error.response?.status !== 404) {
+      logError(
+        error,
+        `Failed to fetch test steps for test case ${testCaseKey}`
+      );
+    }
+    return [];
+  }
+};
+
+/**
+ * Get executions for a test case
+ *
+ * cURL example:
+ * curl -X GET \
+ *   'https://prod-play.zephyr4jiracloud.com/connect/v2/executions?testCaseKey={testCaseKey}&projectId={projectId}&maxResults=50&startAt=0' \
+ *   -H 'Authorization: Bearer YOUR_TOKEN' \
+ *   -H 'Accept: application/json'
+ */
+const getExecutions = async (
+  testCaseKey: string,
+  projectId?: string | number
+): Promise<ZephyrExecution[]> => {
+  if (!ZEPHYR_CONNECT_BASE_URL || !ZEPHYR_ACCESS_TOKEN || !testCaseKey) {
+    return [];
+  }
+
+  try {
+    const baseUrl = getZephyrConnectV2BaseUrl();
+    const headers = {
+      Authorization: `Bearer ${ZEPHYR_ACCESS_TOKEN}`,
+      Accept: "application/json",
+    };
+
+    // Build URL with filters
+    let url = `${baseUrl}/executions?testCaseKey=${encodeURIComponent(
+      testCaseKey
+    )}&maxResults=50&startAt=0`;
+
+    // Add projectId filter if available
+    if (projectId) {
+      url += `&projectId=${projectId}`;
+    } else if (ZEPHYR_PROJECT_ID) {
+      url += `&projectId=${ZEPHYR_PROJECT_ID}`;
+    }
+
+    const response = await axios.get<ZephyrExecutionsResponse>(url, {
+      headers,
+    });
+
+    return response.data.searchObjectList || [];
+  } catch (error) {
+    // Log but don't fail - some test cases might not have executions
+    if (axios.isAxiosError(error) && error.response?.status !== 404) {
+      logError(
+        error,
+        `Failed to fetch executions for test case ${testCaseKey}`
+      );
+    }
+    return [];
+  }
+};
+
+/**
+ * Get links (traceability) for a test case
+ *
+ * cURL example:
+ * curl -X GET \
+ *   'https://prod-play.zephyr4jiracloud.com/connect/v2/testcases/{testCaseKey}/links' \
+ *   -H 'Authorization: Bearer YOUR_TOKEN' \
+ *   -H 'Accept: application/json'
+ */
+const getLinks = async (
+  testCaseKey: string
+): Promise<{
+  issues?: Array<{
+    issueId?: number;
+    self?: string;
+    id?: number;
+    target?: string;
+    type?: string;
+  }>;
+}> => {
+  if (!ZEPHYR_CONNECT_BASE_URL || !ZEPHYR_ACCESS_TOKEN || !testCaseKey) {
+    return {};
+  }
+
+  try {
+    const baseUrl = getZephyrConnectV2BaseUrl();
+    const headers = {
+      Authorization: `Bearer ${ZEPHYR_ACCESS_TOKEN}`,
+      Accept: "application/json",
+    };
+
+    // Use v2 API endpoint: /v2/testcases/{testCaseKey}/links
+    const url = `${baseUrl}/testcases/${testCaseKey}/links`;
+    const response = await axios.get<{
+      issues?: Array<{
+        issueId?: number;
+        self?: string;
+        id?: number;
+        target?: string;
+        type?: string;
+      }>;
+    }>(url, { headers });
+
+    return response.data || {};
+  } catch (error) {
+    // Log but don't fail - some test cases might not have links
+    if (axios.isAxiosError(error) && error.response?.status !== 404) {
+      logError(error, `Failed to fetch links for test case ${testCaseKey}`);
+    }
+    return {};
+  }
+};
+
+/**
+ * Get detailed information for a single test case
+ */
+const getTestCaseDetails = async (
+  testCase: ZephyrTestCase
+): Promise<DetailedTestCase> => {
+  const detailed: DetailedTestCase = {
+    id: testCase.id,
+    key: testCase.key,
+    title: testCase.name,
+    name: testCase.name,
+    projectKey: testCase.projectKey,
+    status: testCase.status,
+    priority: testCase.priority,
+    type: testCase.type,
+    createdOn: testCase.createdOn,
+    updatedOn: testCase.updatedOn,
+    steps: [],
+    executions: [],
+    traceability: {
+      requirements: [],
+      linkedIssues: [],
+      executions: [],
+    },
+  };
+
+  // Extract description and preconditions from testCase if available
+  // Check various possible field names
+  if ((testCase as { description?: string }).description) {
+    detailed.description = String(
+      (testCase as { description?: string }).description
+    );
+  }
+  if ((testCase as { objective?: string }).objective) {
+    detailed.description = String(
+      (testCase as { objective?: string }).objective
+    );
+  }
+  if ((testCase as { preconditions?: string }).preconditions) {
+    detailed.preconditions = String(
+      (testCase as { preconditions?: string }).preconditions
+    );
+  }
+  if ((testCase as { precondition?: string }).precondition) {
+    detailed.preconditions = String(
+      (testCase as { precondition?: string }).precondition
+    );
+  }
+
+  // Extract projectId from testCase if available
+  let projectId: string | number | undefined = ZEPHYR_PROJECT_ID;
+  if (!projectId && (testCase as { project?: { id?: number } }).project) {
+    projectId = (testCase as { project?: { id?: number } }).project?.id;
+  }
+
+  // Get test steps if we have testCaseKey
+  if (testCase.key) {
+    const steps = await getTestSteps(testCase.key);
+    detailed.steps = steps.map((step, index) => {
+      // Handle new API structure with inline object
+      if (step.inline) {
+        return {
+          id: step.id,
+          orderId: step.orderId || index + 1,
+          step: step.inline.description || undefined,
+          data: step.inline.testData || undefined,
+          result: step.inline.expectedResult || undefined,
+          conditions: step.inline.testData || undefined, // Test data contains conditions
+          description: step.inline.description || undefined, // Step description
+          expectations: step.inline.expectedResult || undefined, // Expected result
+          createdOn: step.createdOn,
+          lastModifiedOn: step.lastModifiedOn,
+        };
+      }
+      // Fallback to legacy structure
+      return {
+        id: step.id,
+        orderId: step.orderId || index + 1,
+        step: step.step || undefined,
+        data: step.data || undefined,
+        result: step.result || undefined,
+        conditions: step.data || undefined,
+        description: step.step || undefined,
+        expectations: step.result || undefined,
+        createdOn: step.createdOn,
+        lastModifiedOn: step.lastModifiedOn,
+      };
+    });
+  }
+
+  // Get executions if we have testCaseKey
+  if (testCase.key) {
+    const executions = await getExecutions(testCase.key, projectId);
+    detailed.executions = executions.map((exec) => ({
+      id: exec.id,
+      status: exec.status?.name,
+      cycleName: exec.cycleName,
+      executedBy: exec.executedBy,
+      executedOn: exec.executedOn,
+      comment: exec.comment,
+      defects: exec.defects,
+    }));
+  }
+
+  // Get links (traceability) if we have testCaseKey
+  if (testCase.key) {
+    const links = await getLinks(testCase.key);
+    if (links.issues && links.issues.length > 0) {
+      detailed.traceability = {
+        requirements: [],
+        linkedIssues: links.issues.map((issue) => ({
+          issueId: issue.issueId,
+          id: issue.id,
+          type: issue.type,
+          target: issue.target,
+          self: issue.self,
+        })),
+        executions: [],
+      };
+    }
+  }
+
+  return detailed;
+};
 
 /**
  * Fetch all test cases for a specific Zephyr project
@@ -148,6 +429,11 @@ export const getZephyrTestCases = async ({
       // Add folderId filter if provided
       if (folderId) {
         url += `&folderId=${encodeURIComponent(folderId)}`;
+      }
+
+      // Add projectId filter if provided
+      if (ZEPHYR_PROJECT_ID) {
+        url += `&projectId=${encodeURIComponent(ZEPHYR_PROJECT_ID)}`;
       }
 
       const response = await axios.get<ZephyrTestCasesResponse>(url, {
@@ -260,9 +546,9 @@ const processTestCases = async (projectKey: string, folderId?: string) => {
     const rawDir = join(outputDir, "raw");
     mkdirSync(rawDir, { recursive: true });
 
-    // Save JSON file with test cases data
+    // Save basic JSON file with test cases data
     const saveSpinner = ora({
-      text: `Saving test cases data to output directory`,
+      text: `Saving basic test cases data to output directory`,
       color: "white",
     }).start();
     const jsonPath = join(rawDir, "zephyr-testcases.json");
@@ -274,7 +560,81 @@ const processTestCases = async (projectKey: string, folderId?: string) => {
     }
     writeFileSync(jsonPath, JSON.stringify(testCases, null, 2), "utf-8");
     saveSpinner.succeed(
-      `Test cases data saved to: ${getRelativePath(jsonPath)}`
+      `Basic test cases data saved to: ${getRelativePath(jsonPath)}`
+    );
+
+    // Fetch detailed information for each test case
+    const detailedSpinner = ora({
+      text: `Fetching detailed information for test cases`,
+      color: "white",
+    }).start();
+
+    const detailedTestCases: DetailedTestCase[] = [];
+
+    for (let i = 0; i < testCases.length; i++) {
+      const testCase = testCases[i];
+      detailedSpinner.text = `Fetching details for test case ${i + 1}/${
+        testCases.length
+      }: ${testCase.key || testCase.id}`;
+
+      try {
+        const detailed = await getTestCaseDetails(testCase);
+        detailedTestCases.push(detailed);
+
+        // Add a small delay to avoid rate limiting
+        if (i < testCases.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+      } catch (error) {
+        logError(
+          error,
+          `Failed to fetch details for test case ${testCase.key || testCase.id}`
+        );
+        // Add basic info even if detailed fetch fails
+        detailedTestCases.push({
+          id: testCase.id,
+          key: testCase.key,
+          title: testCase.name,
+          name: testCase.name,
+          projectKey: testCase.projectKey,
+          status: testCase.status,
+          priority: testCase.priority,
+          type: testCase.type,
+          createdOn: testCase.createdOn,
+          updatedOn: testCase.updatedOn,
+          steps: [],
+          executions: [],
+          traceability: {
+            requirements: [],
+            linkedIssues: [],
+            executions: [],
+          },
+        });
+      }
+    }
+
+    detailedSpinner.succeed(
+      `Fetched detailed information for ${detailedTestCases.length} test cases`
+    );
+
+    // Save detailed JSON file
+    const detailedJsonPath = join(rawDir, "zephyr-testcases-detailed.json");
+    try {
+      unlinkSync(detailedJsonPath);
+    } catch {
+      // File doesn't exist, which is fine
+    }
+    writeFileSync(
+      detailedJsonPath,
+      JSON.stringify(detailedTestCases, null, 2),
+      "utf-8"
+    );
+    console.log(
+      chalk.green(
+        `Detailed test cases data saved to: ${getRelativePath(
+          detailedJsonPath
+        )}`
+      )
     );
 
     // Create a compact text summary

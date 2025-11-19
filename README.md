@@ -128,7 +128,7 @@ Extract Jira issue data, linked resources, and PR changes:
 testflow extract
 
 # Extract a specific issue by key
-testflow extract BAT-123
+testflow extract JI-123
 ```
 
 This command will:

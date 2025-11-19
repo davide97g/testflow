@@ -9,7 +9,9 @@ import { loadEnvWithWarnings } from "../env.js";
 // Helper function to convert absolute path to relative path
 const getRelativePath = (absolutePath: string): string => {
   const relativePath = relative(process.cwd(), absolutePath);
-  return relativePath.startsWith("..") ? absolutePath : `/${relativePath.replace(/\\/g, "/")}`;
+  return relativePath.startsWith("..")
+    ? absolutePath
+    : `/${relativePath.replace(/\\/g, "/")}`;
 };
 
 const config = loadConfigSync();
@@ -54,7 +56,11 @@ const logError = (error: unknown, context: string) => {
       : undefined,
   };
 
-  const logEntry = `\n[${timestamp}] ${context}\n${JSON.stringify(errorDetails, null, 2)}\n`;
+  const logEntry = `\n[${timestamp}] ${context}\n${JSON.stringify(
+    errorDetails,
+    null,
+    2
+  )}\n`;
   appendFileSync(logPath, logEntry, "utf-8");
 };
 
@@ -148,7 +154,6 @@ export const filterPatch = (patch: string): string => {
 /**
  * Extract Jira ticket ID from PR data
  * Looks in title, description, and branch names
- * Pattern: [A-Z]+-\d+ (e.g., BAT-2076, PROJ-123)
  */
 const extractTicketId = (prData: unknown): string | null => {
   try {
@@ -159,7 +164,7 @@ const extractTicketId = (prData: unknown): string | null => {
       destination?: { branch?: { name?: string } };
     };
 
-    // Jira ticket pattern: uppercase letters, dash, digits (e.g., BAT-2076, PROJ-123)
+    // Jira ticket pattern: uppercase letters, dash, digits (e.g. PROJ-123)
     const ticketPattern = /([A-Z]+-\d+)/g;
     const foundTickets = new Set<string>();
 
@@ -216,9 +221,15 @@ const extractTicketId = (prData: unknown): string | null => {
   }
 };
 
-export const getPRChanges = async ({ workspace, repo, prId }: PRChangesParams) => {
+export const getPRChanges = async ({
+  workspace,
+  repo,
+  prId,
+}: PRChangesParams) => {
   // Create Basic Auth header
-  const auth = Buffer.from(`${BITBUCKET_EMAIL}:${BITBUCKET_API_TOKEN}`).toString("base64");
+  const auth = Buffer.from(
+    `${BITBUCKET_EMAIL}:${BITBUCKET_API_TOKEN}`
+  ).toString("base64");
 
   const headers = {
     Authorization: `Basic ${auth}`,
@@ -263,7 +274,9 @@ export const getPRChanges = async ({ workspace, repo, prId }: PRChangesParams) =
     diffstatSpinner.succeed(`  Fetched PR diffstat for PR #${prId}`);
   } catch (error) {
     logError(error, `Failed to fetch PR diffstat for PR ${prId}`);
-    diffstatSpinner.warn(chalk.yellow(`  PR diffstat not available for PR #${prId}`));
+    diffstatSpinner.warn(
+      chalk.yellow(`  PR diffstat not available for PR #${prId}`)
+    );
     if (!changes.errors) changes.errors = [];
     if (axios.isAxiosError(error) && error.response?.status === 403) {
       const errorData = error.response.data as {
@@ -425,7 +438,9 @@ const main = async () => {
       const filteredPatch = filterPatch(changes.patch);
       const patchPath = join(outputDir, "pr.patch");
       writeFileSync(patchPath, filteredPatch, "utf-8");
-      patchSaveSpinner.succeed(`  PR patch saved to: ${getRelativePath(patchPath)}`);
+      patchSaveSpinner.succeed(
+        `  PR patch saved to: ${getRelativePath(patchPath)}`
+      );
     }
   } catch (error) {
     logError(error, `Failed to fetch PR changes for PR ${prId}`);

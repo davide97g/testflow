@@ -194,7 +194,7 @@ BITBUCKET_API_TOKEN=your_bitbucket_api_token`}
       answer: (
         <div className="space-y-3">
           <p>Yes! You can extract a specific issue by providing its key:</p>
-          <CodeBlock code="testflow extract BAT-123" />
+          <CodeBlock code="testflow extract J-123" />
           <p>
             Or run{" "}
             <code className="px-1 py-0.5 bg-muted rounded">
@@ -249,7 +249,7 @@ BITBUCKET_API_TOKEN=your_bitbucket_api_token`}
           <CardContent className="pt-6">
             <Accordion type="single" collapsible className="w-full">
               {faqs.map((faq, index) => (
-                <AccordionItem key={index} value={`item-${index}`}>
+                <AccordionItem key={faq.question} value={`item-${index}`}>
                   <AccordionTrigger className="text-left">
                     {faq.question}
                   </AccordionTrigger>

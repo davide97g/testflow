@@ -1,6 +1,6 @@
-import { AlertCircle } from "lucide-react";
 import CodeBlock from "@/components/CodeBlock";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertCircle } from "lucide-react";
 
 const GetStarted = () => {
   return (
@@ -20,15 +20,21 @@ const GetStarted = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-muted-foreground">
-                testflow is published to GitHub Packages. Configure npm to use GitHub Packages:
+                testflow is published to GitHub Packages. Configure npm to use
+                GitHub Packages:
               </p>
-              <CodeBlock code={`echo "@davide97g:registry=https://npm.pkg.github.com" >> ~/.npmrc
-echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN" >> ~/.npmrc`} />
+              <CodeBlock
+                code={`echo "@davide97g:registry=https://npm.pkg.github.com" >> ~/.npmrc
+echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN" >> ~/.npmrc`}
+              />
               <div className="flex gap-2 p-4 bg-accent/10 border border-accent/20 rounded-lg">
                 <AlertCircle className="h-5 w-5 text-accent shrink-0 mt-0.5" />
                 <p className="text-sm">
                   You'll need a GitHub personal access token with{" "}
-                  <code className="px-1 py-0.5 bg-muted rounded text-xs">read:packages</code> scope
+                  <code className="px-1 py-0.5 bg-muted rounded text-xs">
+                    read:packages
+                  </code>{" "}
+                  scope
                 </p>
               </div>
             </CardContent>
@@ -65,7 +71,8 @@ echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN" >> ~/.npmrc`} />
               </p>
               <CodeBlock code="testflow init" />
               <p className="text-sm text-muted-foreground">
-                This command will guide you through setting up Bitbucket, Jira, and Confluence integrations.
+                This command will guide you through setting up Bitbucket, Jira,
+                and Confluence integrations.
               </p>
             </CardContent>
           </Card>
@@ -76,8 +83,9 @@ echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN" >> ~/.npmrc`} />
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-muted-foreground">
-                Create a <code className="px-1 py-0.5 bg-muted rounded">.env</code> file with the
-                required tokens:
+                Create a{" "}
+                <code className="px-1 py-0.5 bg-muted rounded">.env</code> file
+                with the required tokens:
               </p>
               <CodeBlock
                 code={`# Required: Jira credentials
@@ -98,15 +106,22 @@ CONFLUENCE_API_TOKEN=your_confluence_api_token`}
                 <div className="text-sm space-y-2">
                   <p className="font-medium">Creating API Tokens:</p>
                   <ul className="list-disc list-inside space-y-1 ml-2">
-                    <li>Jira: Required - Create at Atlassian Account Settings</li>
-                    <li>Bitbucket: Optional - Create app password with PR read permissions</li>
-                    <li>Confluence: Optional - Uses same token as Jira if same domain</li>
+                    <li>
+                      Jira: Required - Create at Atlassian Account Settings
+                    </li>
+                    <li>
+                      Bitbucket: Optional - Create app password with PR read
+                      permissions
+                    </li>
+                    <li>
+                      Confluence: Optional - Uses same token as Jira if same
+                      domain
+                    </li>
                   </ul>
                 </div>
               </div>
             </CardContent>
           </Card>
-
 
           <Card className="bg-gradient-to-br from-primary/10 to-accent/10 border-primary/20">
             <CardHeader>
@@ -114,11 +129,12 @@ CONFLUENCE_API_TOKEN=your_confluence_api_token`}
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground mb-4">
-                Now you can start using testflow to extract Jira issues and PR changes:
+                Now you can start using testflow to extract Jira issues and PR
+                changes:
               </p>
               <div className="space-y-3">
                 <CodeBlock code="testflow extract" />
-                <CodeBlock code="testflow extract BAT-123" />
+                <CodeBlock code="testflow extract J-123" />
                 <CodeBlock code="testflow extract:pr 123" />
               </div>
             </CardContent>

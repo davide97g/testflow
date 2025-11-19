@@ -1341,7 +1341,6 @@ const processIssue = async (issueIdOrKey: string) => {
   }
 };
 
-// bun run get-jira-issue.ts BAT-2076
 // bun run extract (interactive mode)
 const main = async () => {
   // Get issue ID or key from command line arguments
