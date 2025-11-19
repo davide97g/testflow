@@ -3,6 +3,7 @@ import chalk from "chalk";
 import { appendFileSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ora from "ora";
+import { loadConfigSync } from "../config.js";
 import { loadEnvWithWarnings } from "../env.js";
 import type {
   DetailedTestCase,
@@ -25,20 +26,35 @@ const getRelativePath = (absolutePath: string): string => {
 
 // Load and validate environment variables (shows warnings instead of errors)
 loadEnvWithWarnings([
-  "ZEPHYR_PROJECT_KEY",
   "ZEPHYR_BASE_URL",
   "ZEPHYR_ACCESS_TOKEN",
-  "ZEPHYR_FOLDER_ID",
-  "ZEPHYR_PROJECT_ID",
   "ZEPHYR_CONNECT_BASE_URL",
 ]);
 
-// Access environment variables directly
-const ZEPHYR_PROJECT_KEY = process.env.ZEPHYR_PROJECT_KEY;
+// Try to load config, fallback to environment variables
+let configZephyrProjectKey: string | undefined;
+let configZephyrProjectId: string | number | undefined;
+let configZephyrFolderId: string | undefined;
+
+try {
+  const config = loadConfigSync();
+  if (config.zephyr) {
+    configZephyrProjectKey = config.zephyr.projectKey;
+    configZephyrProjectId = config.zephyr.projectId;
+    configZephyrFolderId = config.zephyr.folderId;
+  }
+} catch {
+  // Config file doesn't exist or couldn't be loaded, use env vars only
+}
+
+// Access environment variables directly (used as fallback)
+const ZEPHYR_PROJECT_KEY =
+  configZephyrProjectKey || process.env.ZEPHYR_PROJECT_KEY;
 const ZEPHYR_BASE_URL = process.env.ZEPHYR_BASE_URL;
 const ZEPHYR_ACCESS_TOKEN = process.env.ZEPHYR_ACCESS_TOKEN;
-const ZEPHYR_FOLDER_ID = process.env.ZEPHYR_FOLDER_ID;
-const ZEPHYR_PROJECT_ID = process.env.ZEPHYR_PROJECT_ID;
+const ZEPHYR_FOLDER_ID = configZephyrFolderId || process.env.ZEPHYR_FOLDER_ID;
+const ZEPHYR_PROJECT_ID =
+  configZephyrProjectId || process.env.ZEPHYR_PROJECT_ID;
 const ZEPHYR_CONNECT_BASE_URL = process.env.ZEPHYR_CONNECT_BASE_URL;
 
 const logError = (error: unknown, context: string) => {
@@ -707,9 +723,9 @@ const main = async () => {
   if (!projectKey) {
     console.error(
       chalk.red(
-        "Error: Project ID is required.\n" +
+        "Error: Project key is required.\n" +
           "Usage: bun run get-zephyr-testcases.ts <projectKey>\n" +
-          "Or set ZEPHYR_PROJECT_KEY environment variable."
+          "Or configure it in .testflow/config.json (zephyr.projectKey) or set ZEPHYR_PROJECT_KEY environment variable."
       )
     );
     process.exit(1);

@@ -24,6 +24,9 @@ interface InitAnswers {
   assignee?: string;
   statuses?: string[];
   confluenceBaseUrl?: string;
+  zephyrProjectKey?: string;
+  zephyrProjectId?: string;
+  zephyrFolderId?: string;
 }
 
 interface PackageJson {
@@ -89,6 +92,10 @@ const loadDefaults = async (): Promise<Partial<InitAnswers>> => {
     defaults.assignee = existingConfig.jira.assignee;
     defaults.statuses = existingConfig.jira.statuses;
     defaults.confluenceBaseUrl = existingConfig.confluence?.baseUrl;
+    defaults.zephyrProjectKey = existingConfig.zephyr?.projectKey;
+    defaults.zephyrProjectId =
+      existingConfig.zephyr?.projectId?.toString() || undefined;
+    defaults.zephyrFolderId = existingConfig.zephyr?.folderId;
   } catch (error) {
     // Ignore errors reading config (file might not exist yet)
     // Only log errors that are not about missing config file
@@ -294,6 +301,62 @@ const collectAnswers = async (
     });
   }
 
+  console.log(chalk.cyan("\n🧪 Zephyr Configuration"));
+  console.log(chalk.gray("─".repeat(40)));
+
+  // Optional: Zephyr configuration
+  const useZephyr = await confirm({
+    message: "Do you want to configure Zephyr integration?",
+    default: defaults.zephyrProjectKey !== undefined,
+  });
+
+  let zephyrProjectKey: string | undefined;
+  let zephyrProjectId: string | undefined;
+  let zephyrFolderId: string | undefined;
+
+  if (useZephyr) {
+    zephyrProjectKey = await input({
+      message: "Zephyr project key:",
+      default: defaults.zephyrProjectKey || "",
+      validate: (val: string) => {
+        const trimmed = (val ?? "").trim();
+        return trimmed ? true : "Zephyr project key is required";
+      },
+    });
+
+    const useProjectId = await confirm({
+      message: "Do you want to configure Zephyr project ID?",
+      default: defaults.zephyrProjectId !== undefined,
+    });
+
+    if (useProjectId) {
+      zephyrProjectId = await input({
+        message: "Zephyr project ID:",
+        default: defaults.zephyrProjectId || "",
+        validate: (val: string) => {
+          const trimmed = (val ?? "").trim();
+          return trimmed ? true : "Zephyr project ID is required";
+        },
+      });
+    }
+
+    const useFolderId = await confirm({
+      message: "Do you want to configure Zephyr folder ID?",
+      default: defaults.zephyrFolderId !== undefined,
+    });
+
+    if (useFolderId) {
+      zephyrFolderId = await input({
+        message: "Zephyr folder ID:",
+        default: defaults.zephyrFolderId || "",
+        validate: (val: string) => {
+          const trimmed = (val ?? "").trim();
+          return trimmed ? true : "Zephyr folder ID is required";
+        },
+      });
+    }
+  }
+
   return {
     workspace: workspace?.trim(),
     repo: repo?.trim(),
@@ -302,6 +365,9 @@ const collectAnswers = async (
     assignee: assignee?.trim(),
     statuses,
     confluenceBaseUrl: confluenceBaseUrl?.trim(),
+    zephyrProjectKey: zephyrProjectKey?.trim(),
+    zephyrProjectId: zephyrProjectId?.trim(),
+    zephyrFolderId: zephyrFolderId?.trim(),
   };
 };
 
@@ -335,6 +401,15 @@ const writeConfig = async (answers: InitAnswers): Promise<void> => {
       ...(answers.confluenceBaseUrl && {
         confluence: {
           baseUrl: answers.confluenceBaseUrl,
+        },
+      }),
+      ...(answers.zephyrProjectKey && {
+        zephyr: {
+          projectKey: answers.zephyrProjectKey,
+          ...(answers.zephyrProjectId && {
+            projectId: answers.zephyrProjectId,
+          }),
+          ...(answers.zephyrFolderId && { folderId: answers.zephyrFolderId }),
         },
       }),
     };

@@ -13,7 +13,10 @@ export const configSchema = z.object({
     })
     .optional(),
   jira: z.object({
-    baseUrl: z.string().url("Jira baseUrl must be a valid URL").min(1, "Jira baseUrl is required"),
+    baseUrl: z
+      .string()
+      .url("Jira baseUrl must be a valid URL")
+      .min(1, "Jira baseUrl is required"),
     boardId: z.number().int().positive().optional(),
     assignee: z.string().email("Assignee must be a valid email").optional(),
     statuses: z.array(z.string().min(1)).optional(),
@@ -24,6 +27,13 @@ export const configSchema = z.object({
         .string()
         .url("Confluence baseUrl must be a valid URL")
         .min(1, "Confluence baseUrl is required"),
+    })
+    .optional(),
+  zephyr: z
+    .object({
+      projectKey: z.string().min(1, "Zephyr projectKey is required"),
+      projectId: z.union([z.string(), z.number()]).optional(),
+      folderId: z.string().optional(),
     })
     .optional(),
 });
@@ -40,7 +50,8 @@ export type Config = z.infer<typeof configSchema>;
  * @throws Error if config file doesn't exist or validation fails
  */
 export const loadConfig = async (configPath?: string): Promise<Config> => {
-  const configFilePath = configPath || path.join(process.cwd(), ".testflow", "config.json");
+  const configFilePath =
+    configPath || path.join(process.cwd(), ".testflow", "config.json");
 
   if (!existsSync(configFilePath)) {
     throw new Error(
@@ -72,7 +83,8 @@ export const loadConfig = async (configPath?: string): Promise<Config> => {
  * @throws Error if config file doesn't exist or validation fails
  */
 export const loadConfigSync = (configPath?: string): Config => {
-  const configFilePath = configPath || path.join(process.cwd(), ".testflow", "config.json");
+  const configFilePath =
+    configPath || path.join(process.cwd(), ".testflow", "config.json");
 
   try {
     const configData = JSON.parse(readFileSync(configFilePath, "utf8"));
