@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileJson, Key, List, TestTube } from "lucide-react";
+import { FileJson, Key, List, Sparkles, TestTube } from "lucide-react";
 import Link from "next/link";
 
 export default function Home() {
@@ -81,6 +81,23 @@ export default function Home() {
             <CardContent>
               <Link href="/zephyr">
                 <Button className="w-full">View Test Cases</Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5" />
+                <CardTitle>E2E Test Generation</CardTitle>
+              </div>
+              <CardDescription>
+                Generate E2E tests from Jira issues
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href="/workflow">
+                <Button className="w-full">Start Workflow</Button>
               </Link>
             </CardContent>
           </Card>
