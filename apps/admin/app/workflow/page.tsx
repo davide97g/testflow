@@ -19,6 +19,12 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 import {
   Check,
@@ -658,7 +664,7 @@ export default function WorkflowPage() {
           </p>
         </div>
 
-        {/* Search Section */}
+        {/* Search Section with Results */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Step 1: Search Jira Issue</CardTitle>
@@ -667,7 +673,7 @@ export default function WorkflowPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-2">
+            <div className="flex gap-2 mb-4">
               <Input
                 placeholder="Enter Jira issue key (e.g., PROJ-123) or search query"
                 value={searchQuery}
@@ -677,9 +683,9 @@ export default function WorkflowPage() {
                     handleSearch();
                   }
                 }}
-                className="flex-1"
+                className="max-w-md"
               />
-              <Button onClick={handleSearch} disabled={isSearching}>
+              <Button onClick={handleSearch} disabled={isSearching} size="sm">
                 {isSearching ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -693,117 +699,109 @@ export default function WorkflowPage() {
                 )}
               </Button>
             </div>
+
+            {/* Search Results */}
+            {issues.length > 0 && (
+              <div className="mt-4">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Key</TableHead>
+                      <TableHead>Title</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>PR</TableHead>
+                      <TableHead>Branch</TableHead>
+                      <TableHead>Confluence</TableHead>
+                      <TableHead>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {issues.map((issue) => (
+                      <TableRow
+                        key={issue.key}
+                        className={
+                          selectedIssue?.key === issue.key
+                            ? "bg-muted"
+                            : undefined
+                        }
+                      >
+                        <TableCell className="font-mono font-medium">
+                          {issue.key}
+                        </TableCell>
+                        <TableCell>{issue.title}</TableCell>
+                        <TableCell>
+                          <span className="rounded-full bg-muted px-2 py-1 text-xs">
+                            {issue.status}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          {issue.prOpen === "Y" ? (
+                            <span className="text-green-600">Yes</span>
+                          ) : (
+                            <span className="text-muted-foreground">No</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {issue.branchName ? (
+                            <a
+                              href={issue.branchUrl || "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-primary hover:underline"
+                            >
+                              <GitBranch className="h-3 w-3" />
+                              {issue.branchName}
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {issue.confluencePages &&
+                          issue.confluencePages.length > 0 ? (
+                            <div className="flex flex-col gap-1">
+                              {issue.confluencePages.map((page) => (
+                                <a
+                                  key={page.id}
+                                  href={page.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-primary hover:underline"
+                                >
+                                  <FileText className="h-3 w-3" />
+                                  {page.title}
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            onClick={() => handleExtract(issue)}
+                            disabled={isExtracting}
+                          >
+                            {isExtracting &&
+                            selectedIssue?.key === issue.key ? (
+                              <>
+                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                Extracting...
+                              </>
+                            ) : (
+                              "Extract"
+                            )}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </CardContent>
         </Card>
-
-        {/* Search Results */}
-        {issues.length > 0 && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Search Results</CardTitle>
-              <CardDescription>
-                Select an issue to extract data and generate tests
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Key</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>PR</TableHead>
-                    <TableHead>Branch</TableHead>
-                    <TableHead>Confluence</TableHead>
-                    <TableHead>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {issues.map((issue) => (
-                    <TableRow
-                      key={issue.key}
-                      className={
-                        selectedIssue?.key === issue.key
-                          ? "bg-muted"
-                          : undefined
-                      }
-                    >
-                      <TableCell className="font-mono font-medium">
-                        {issue.key}
-                      </TableCell>
-                      <TableCell>{issue.title}</TableCell>
-                      <TableCell>
-                        <span className="rounded-full bg-muted px-2 py-1 text-xs">
-                          {issue.status}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {issue.prOpen === "Y" ? (
-                          <span className="text-green-600">Yes</span>
-                        ) : (
-                          <span className="text-muted-foreground">No</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {issue.branchName ? (
-                          <a
-                            href={issue.branchUrl || "#"}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-primary hover:underline"
-                          >
-                            <GitBranch className="h-3 w-3" />
-                            {issue.branchName}
-                          </a>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {issue.confluencePages &&
-                        issue.confluencePages.length > 0 ? (
-                          <div className="flex flex-col gap-1">
-                            {issue.confluencePages.map((page) => (
-                              <a
-                                key={page.id}
-                                href={page.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1 text-primary hover:underline"
-                              >
-                                <FileText className="h-3 w-3" />
-                                {page.title}
-                              </a>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          onClick={() => handleExtract(issue)}
-                          disabled={isExtracting}
-                        >
-                          {isExtracting &&
-                          selectedIssue?.key === issue.key ? (
-                            <>
-                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                              Extracting...
-                            </>
-                          ) : (
-                            "Extract"
-                          )}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Image Attachments Section */}
         {selectedIssue && imageAttachments.length > 0 && (
@@ -1121,7 +1119,7 @@ export default function WorkflowPage() {
                 <Button
                   onClick={handleGenerate}
                   disabled={isGenerating || isExtracting}
-                  className="w-full"
+                  className="w-full mb-4"
                 >
                   {isGenerating ? (
                     <>
@@ -1135,15 +1133,60 @@ export default function WorkflowPage() {
                     </>
                   )}
                 </Button>
+
+                {/* LLM Prompt Output */}
+                {outputFiles.length > 0 && (() => {
+                  const categorized = categorizeFiles(outputFiles);
+                  const hasPrompt = categorized.prompt.length > 0;
+
+                  if (hasPrompt) {
+                    return (
+                      <div className="mt-6 pt-6 border-t">
+                        <div className="mb-4 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-5 w-5 text-primary" />
+                            <h3 className="text-lg font-semibold">LLM Prompt (Ready to Copy)</h3>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              const promptFile = categorized.prompt[0];
+                              if (promptFile) {
+                                handleCopy(promptFile.content, promptFile.path);
+                              }
+                            }}
+                          >
+                            {copiedPath === categorized.prompt[0]?.path ? (
+                              <>
+                                <Check className="mr-2 h-3 w-3" />
+                                Copied
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="mr-2 h-3 w-3" />
+                                Copy Prompt
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                        {categorized.prompt.map((file) => (
+                          <div key={file.path} className="mb-4">
+                            {renderFileCard(file)}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </CardContent>
             </Card>
           </div>
         )}
 
-        {/* Output Files Section */}
+        {/* Output Files Section - Accordion */}
         {outputFiles.length > 0 && (() => {
           const categorized = categorizeFiles(outputFiles);
-          const hasPrompt = categorized.prompt.length > 0;
           const hasJira = categorized.jira.length > 0;
           const hasBitbucket = categorized.bitbucket.length > 0;
           const hasConfluence = categorized.confluence.length > 0;
@@ -1163,8 +1206,10 @@ export default function WorkflowPage() {
             setActiveTab(availableTabs[0]);
           }
 
+          if (availableTabs.length === 0) return null;
+
           return (
-            <Card>
+            <Card className="mb-6">
               <CardHeader>
                 <CardTitle>Step 4: Output Files</CardTitle>
                 <CardDescription>
@@ -1172,133 +1217,104 @@ export default function WorkflowPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {/* Prompt Section - Always shown first if available */}
-                {hasPrompt && (
-                  <div className="mb-6">
-                    <div className="mb-4 flex items-center justify-between">
+                <Accordion type="single" collapsible className="w-full">
+                  <AccordionItem value="output-files">
+                    <AccordionTrigger>
                       <div className="flex items-center gap-2">
-                        <Sparkles className="h-5 w-5 text-primary" />
-                        <h3 className="text-lg font-semibold">LLM Prompt (Ready to Copy)</h3>
+                        <FileText className="h-4 w-4" />
+                        <span>View Output Files</span>
                       </div>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          const promptFile = categorized.prompt[0];
-                          if (promptFile) {
-                            handleCopy(promptFile.content, promptFile.path);
-                          }
-                        }}
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <Tabs
+                        value={activeTab}
+                        onValueChange={(value) => setActiveTab(value as FileCategory)}
                       >
-                        {copiedPath === categorized.prompt[0]?.path ? (
-                          <>
-                            <Check className="mr-2 h-3 w-3" />
-                            Copied
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="mr-2 h-3 w-3" />
-                            Copy Prompt
-                          </>
+                        <TabsList
+                          className={cn(
+                            "grid w-full mb-4",
+                            availableTabs.length === 1 && "grid-cols-1",
+                            availableTabs.length === 2 && "grid-cols-2",
+                            availableTabs.length === 3 && "grid-cols-3",
+                            availableTabs.length === 4 && "grid-cols-4",
+                            availableTabs.length === 5 && "grid-cols-5"
+                          )}
+                        >
+                          {hasJira && (
+                            <TabsTrigger value="jira" className="flex items-center gap-2">
+                              <FileText className="h-4 w-4" />
+                              Jira
+                            </TabsTrigger>
+                          )}
+                          {hasBitbucket && (
+                            <TabsTrigger value="bitbucket" className="flex items-center gap-2">
+                              <GitBranch className="h-4 w-4" />
+                              Bitbucket
+                            </TabsTrigger>
+                          )}
+                          {hasConfluence && (
+                            <TabsTrigger value="confluence" className="flex items-center gap-2">
+                              <BookOpen className="h-4 w-4" />
+                              Confluence
+                            </TabsTrigger>
+                          )}
+                          {hasZephyr && (
+                            <TabsTrigger value="zephyr" className="flex items-center gap-2">
+                              <Database className="h-4 w-4" />
+                              Zephyr
+                            </TabsTrigger>
+                          )}
+                          {hasOther && (
+                            <TabsTrigger value="other" className="flex items-center gap-2">
+                              <Code className="h-4 w-4" />
+                              Other
+                            </TabsTrigger>
+                          )}
+                        </TabsList>
+
+                        {hasJira && (
+                          <TabsContent value="jira">
+                            <div className="space-y-4">
+                              {categorized.jira.map((file) => renderFileCard(file))}
+                            </div>
+                          </TabsContent>
                         )}
-                      </Button>
-                    </div>
-                    {categorized.prompt.map((file) => (
-                      <div key={file.path} className="mb-4">
-                        {renderFileCard(file)}
-                      </div>
-                    ))}
-                  </div>
-                )}
 
-                {/* Tabs for other categories */}
-                {availableTabs.length > 0 && (
-                  <Tabs
-                    value={activeTab}
-                    onValueChange={(value) => setActiveTab(value as FileCategory)}
-                  >
-                    <TabsList
-                      className={cn(
-                        "grid w-full",
-                        availableTabs.length === 1 && "grid-cols-1",
-                        availableTabs.length === 2 && "grid-cols-2",
-                        availableTabs.length === 3 && "grid-cols-3",
-                        availableTabs.length === 4 && "grid-cols-4",
-                        availableTabs.length === 5 && "grid-cols-5"
-                      )}
-                    >
-                      {hasJira && (
-                        <TabsTrigger value="jira" className="flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
-                          Jira
-                        </TabsTrigger>
-                      )}
-                      {hasBitbucket && (
-                        <TabsTrigger value="bitbucket" className="flex items-center gap-2">
-                          <GitBranch className="h-4 w-4" />
-                          Bitbucket
-                        </TabsTrigger>
-                      )}
-                      {hasConfluence && (
-                        <TabsTrigger value="confluence" className="flex items-center gap-2">
-                          <BookOpen className="h-4 w-4" />
-                          Confluence
-                        </TabsTrigger>
-                      )}
-                      {hasZephyr && (
-                        <TabsTrigger value="zephyr" className="flex items-center gap-2">
-                          <Database className="h-4 w-4" />
-                          Zephyr
-                        </TabsTrigger>
-                      )}
-                      {hasOther && (
-                        <TabsTrigger value="other" className="flex items-center gap-2">
-                          <Code className="h-4 w-4" />
-                          Other
-                        </TabsTrigger>
-                      )}
-                    </TabsList>
+                        {hasBitbucket && (
+                          <TabsContent value="bitbucket">
+                            <div className="space-y-4">
+                              {categorized.bitbucket.map((file) => renderFileCard(file))}
+                            </div>
+                          </TabsContent>
+                        )}
 
-                    {hasJira && (
-                      <TabsContent value="jira">
-                        <div className="space-y-4 mt-4">
-                          {categorized.jira.map((file) => renderFileCard(file))}
-                        </div>
-                      </TabsContent>
-                    )}
+                        {hasConfluence && (
+                          <TabsContent value="confluence">
+                            <div className="space-y-4">
+                              {categorized.confluence.map((file) => renderFileCard(file))}
+                            </div>
+                          </TabsContent>
+                        )}
 
-                    {hasBitbucket && (
-                      <TabsContent value="bitbucket">
-                        <div className="space-y-4 mt-4">
-                          {categorized.bitbucket.map((file) => renderFileCard(file))}
-                        </div>
-                      </TabsContent>
-                    )}
+                        {hasZephyr && (
+                          <TabsContent value="zephyr">
+                            <div className="space-y-4">
+                              {categorized.zephyr.map((file) => renderFileCard(file))}
+                            </div>
+                          </TabsContent>
+                        )}
 
-                    {hasConfluence && (
-                      <TabsContent value="confluence">
-                        <div className="space-y-4 mt-4">
-                          {categorized.confluence.map((file) => renderFileCard(file))}
-                        </div>
-                      </TabsContent>
-                    )}
-
-                    {hasZephyr && (
-                      <TabsContent value="zephyr">
-                        <div className="space-y-4 mt-4">
-                          {categorized.zephyr.map((file) => renderFileCard(file))}
-                        </div>
-                      </TabsContent>
-                    )}
-
-                    {hasOther && (
-                      <TabsContent value="other">
-                        <div className="space-y-4 mt-4">
-                          {categorized.other.map((file) => renderFileCard(file))}
-                        </div>
-                      </TabsContent>
-                    )}
-                  </Tabs>
-                )}
+                        {hasOther && (
+                          <TabsContent value="other">
+                            <div className="space-y-4">
+                              {categorized.other.map((file) => renderFileCard(file))}
+                            </div>
+                          </TabsContent>
+                        )}
+                      </Tabs>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
               </CardContent>
             </Card>
           );

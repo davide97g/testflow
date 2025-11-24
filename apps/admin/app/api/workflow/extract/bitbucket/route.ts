@@ -26,8 +26,13 @@ export async function POST(request: NextRequest) {
 
     if (!BITBUCKET_EMAIL || !BITBUCKET_API_TOKEN) {
       return NextResponse.json(
-        { error: "BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required" },
-        { status: 400 }
+        {
+          success: true,
+          data: {},
+          hasData: false,
+          error: "Bitbucket credentials not configured",
+        },
+        { status: 200 }
       );
     }
 
@@ -35,7 +40,7 @@ export async function POST(request: NextRequest) {
     const bbAuth = Buffer.from(
       `${BITBUCKET_EMAIL}:${BITBUCKET_API_TOKEN}`
     ).toString("base64");
-    const headers = {
+    const bbHeaders = {
       Authorization: `Basic ${bbAuth}`,
       Accept: "application/json",
     };
@@ -54,7 +59,7 @@ export async function POST(request: NextRequest) {
     // Try to find PR
     try {
       const prsUrl = `${BITBUCKET_BASE_URL}/repositories/${config.bitbucket.workspace}/${config.bitbucket.repo}/pullrequests?state=OPEN&pagelen=50`;
-      const prsResponse = await axios.get(prsUrl, { headers });
+      const prsResponse = await axios.get(prsUrl, { headers: bbHeaders });
       const prsData = prsResponse.data as {
         values?: Array<{
           title?: string;
@@ -89,26 +94,17 @@ export async function POST(request: NextRequest) {
           }
         }
       }
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 401) {
-          console.error(
-            "Bitbucket authentication failed. Please check your credentials."
-          );
-        } else {
-          console.error("Error fetching PR:", error.message);
-        }
-      } else {
-        console.error("Error fetching PR:", error);
-      }
-      // Continue to try branches even if PR fetch fails
+    } catch {
+      // Ignore PR fetch errors, continue to try branches
     }
 
     // Try to find branch if not found in PR
     if (!result.branch) {
       try {
         const branchesUrl = `${BITBUCKET_BASE_URL}/repositories/${config.bitbucket.workspace}/${config.bitbucket.repo}/refs/branches?pagelen=100`;
-        const branchesResponse = await axios.get(branchesUrl, { headers });
+        const branchesResponse = await axios.get(branchesUrl, {
+          headers: bbHeaders,
+        });
         const branchesData = branchesResponse.data as {
           values?: Array<{
             name?: string;
@@ -127,38 +123,8 @@ export async function POST(request: NextRequest) {
             }
           }
         }
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          if (error.response?.status === 401) {
-            console.error(
-              "Bitbucket authentication failed. Please check your credentials."
-            );
-            // If we have PR data, return it; otherwise return auth error
-            if (result.pr) {
-              // We have PR data, so return it even though branch fetch failed
-              return NextResponse.json({
-                success: true,
-                data: result,
-                hasData: true,
-                warning:
-                  "Branch fetch failed due to authentication, but PR data is available.",
-              });
-            }
-            // No data at all, return auth error
-            return NextResponse.json({
-              success: false,
-              data: {},
-              hasData: false,
-              error:
-                "Authentication failed. Please check your Bitbucket credentials.",
-            });
-          } else {
-            console.error("Error fetching branch:", error.message);
-          }
-        } else {
-          console.error("Error fetching branch:", error);
-        }
-        // Continue - we'll return what we have (PR data if available)
+      } catch {
+        // Ignore branch fetch errors
       }
     }
 
@@ -179,21 +145,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching Bitbucket data:", error);
-
-    // Check if it's an authentication error
-    if (axios.isAxiosError(error) && error.response?.status === 401) {
-      return NextResponse.json(
-        {
-          success: false,
-          data: {},
-          hasData: false,
-          error:
-            "Authentication failed. Please check your Bitbucket credentials.",
-        },
-        { status: 200 } // Return 200 so UI can handle it gracefully
-      );
-    }
-
     return NextResponse.json(
       {
         success: true,
@@ -201,7 +152,7 @@ export async function POST(request: NextRequest) {
         hasData: false,
         error: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 200 } // Return 200 even on error, just with no data
+      { status: 200 }
     );
   }
 }
