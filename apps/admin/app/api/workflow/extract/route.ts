@@ -1,7 +1,8 @@
 import { getEnvVars } from "@/lib/env";
+import axios from "axios";
 import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -77,8 +78,103 @@ export async function POST(request: NextRequest) {
     mkdirSync(testflowDir, { recursive: true });
     
     // Write config
-    const { writeFileSync } = await import("node:fs");
     writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+    // Fetch image attachments metadata (without downloading files)
+    const outputDir = join(testflowDir, "output", issueKey);
+    mkdirSync(outputDir, { recursive: true });
+
+    const imageAttachments: Array<{
+      id: string;
+      filename: string;
+      mimeType: string;
+      size: number;
+      contentUrl: string;
+      thumbnailUrl?: string;
+    }> = [];
+
+    try {
+      // Fetch attachments metadata only
+      const auth = Buffer.from(
+        `${envVars.JIRA_EMAIL}:${envVars.JIRA_API_TOKEN}`
+      ).toString("base64");
+      const headers = {
+        Authorization: `Basic ${auth}`,
+        Accept: "application/json",
+      };
+
+      let normalizedBaseUrl = config.jira.baseUrl.trim().replace(/\/+$/, "");
+      normalizedBaseUrl = normalizedBaseUrl.replace(/\/rest\/api\/[23]$/, "");
+
+      const issueUrl = `${normalizedBaseUrl}/rest/api/3/issue/${issueKey}?fields=attachment`;
+      const issueResponse = await axios.get(issueUrl, { headers });
+      const issueData = issueResponse.data as {
+        fields?: {
+          attachment?: Array<{
+            id?: string;
+            filename?: string;
+            mimeType?: string;
+            size?: number;
+            content?: string;
+            thumbnail?: string;
+          }>;
+        };
+      };
+
+      const attachmentList = issueData.fields?.attachment || [];
+      const IMAGE_EXTENSIONS = [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".webp",
+        ".svg",
+        ".bmp",
+        ".tiff",
+      ];
+      const IMAGE_MIME_TYPES = [
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "image/svg+xml",
+        "image/bmp",
+        "image/tiff",
+      ];
+
+      for (const attachment of attachmentList) {
+        const filename = attachment.filename || "";
+        const mimeType = attachment.mimeType || "";
+        const lowerFilename = filename.toLowerCase();
+
+        const isImage =
+          (mimeType && IMAGE_MIME_TYPES.includes(mimeType.toLowerCase())) ||
+          IMAGE_EXTENSIONS.some((ext) => lowerFilename.endsWith(ext));
+
+        if (isImage && attachment.content) {
+          imageAttachments.push({
+            id: attachment.id || "",
+            filename,
+            mimeType,
+            size: attachment.size || 0,
+            contentUrl: attachment.content,
+            thumbnailUrl: attachment.thumbnail,
+          });
+        }
+      }
+
+      // Save attachments metadata only (no file storage)
+      const attachmentsMetadataPath = join(outputDir, "attachments-metadata.json");
+      writeFileSync(
+        attachmentsMetadataPath,
+        JSON.stringify(imageAttachments, null, 2),
+        "utf-8"
+      );
+    } catch (error) {
+      console.error("Error fetching attachments:", error);
+      // Continue with extraction even if attachments fail
+    }
 
     // Run CLI extract command - run from monorepo root so CLI can find its files
     return new Promise<NextResponse>((resolve) => {

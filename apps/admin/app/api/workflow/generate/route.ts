@@ -77,10 +77,12 @@ export async function POST(request: NextRequest) {
     const issueDescriptionPath = join(outputDir, "jira-issue-description.txt");
     const prPatchPath = join(outputDir, "pr.patch");
     const confluenceDir = join(outputDir, "confluence");
+    const attachmentsMetadataPath = join(outputDir, "attachments-metadata.json");
 
     let issueDescription = "";
     let prPatch = "";
     let confluenceContent = "";
+    let imageAttachmentsSection = "";
 
     if (existsSync(issueDescriptionPath)) {
       issueDescription = readFileSync(issueDescriptionPath, "utf-8");
@@ -100,6 +102,49 @@ export async function POST(request: NextRequest) {
         const filePath = join(confluenceDir, file);
         const content = readFileSync(filePath, "utf-8");
         confluenceContent += `\n\n--- Confluence Page: ${file} ---\n${content}`;
+      }
+    }
+
+    // Read image attachments metadata
+    if (existsSync(attachmentsMetadataPath)) {
+      try {
+        const attachmentsMetadata = JSON.parse(
+          readFileSync(attachmentsMetadataPath, "utf-8")
+        ) as Array<{
+          id: string;
+          filename: string;
+          mimeType: string;
+          size: number;
+          contentUrl: string;
+          thumbnailUrl?: string;
+        }>;
+
+        if (attachmentsMetadata.length > 0) {
+          imageAttachmentsSection = "\n\n### Image Attachments\n\n";
+          imageAttachmentsSection +=
+            "The following images are attached to this Jira issue. ";
+          imageAttachmentsSection +=
+            "These images may contain important visual information for understanding the requirements:\n\n";
+
+          for (const attachment of attachmentsMetadata) {
+            imageAttachmentsSection += `- **${attachment.filename}**\n`;
+            imageAttachmentsSection += `  - Type: ${attachment.mimeType}\n`;
+            imageAttachmentsSection += `  - Size: ${(attachment.size / 1024).toFixed(2)} KB\n`;
+            imageAttachmentsSection += `  - Direct URL: ${attachment.contentUrl}\n`;
+            imageAttachmentsSection += `  - Proxy URL: /api/jira/attachments/${issueKey}/${encodeURIComponent(attachment.filename)}\n`;
+            if (attachment.thumbnailUrl) {
+              imageAttachmentsSection += `  - Thumbnail: ${attachment.thumbnailUrl}\n`;
+            }
+            imageAttachmentsSection += "\n";
+          }
+
+          imageAttachmentsSection +=
+            "\n**Note:** Images are fetched on-demand from Jira. ";
+          imageAttachmentsSection +=
+            "You can use the proxy URLs (which handle authentication) or the direct Jira URLs to access the images.\n";
+        }
+      } catch (error) {
+        console.error("Error reading attachments metadata:", error);
       }
     }
 
@@ -126,6 +171,8 @@ ${prPatch}
 ${confluenceContent ? `### Confluence Pages
 ${confluenceContent}
 ` : ""}
+
+${imageAttachmentsSection}
 
 ---
 

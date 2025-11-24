@@ -31,6 +31,7 @@ import {
   BookOpen,
   Code,
   Database,
+  Image as ImageIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -50,6 +51,15 @@ interface JiraIssue {
   branchName?: string;
   branchUrl?: string;
   confluencePages?: ConfluencePage[];
+}
+
+interface ImageAttachment {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  contentUrl: string;
+  thumbnailUrl?: string;
 }
 
 interface OutputFile {
@@ -76,6 +86,8 @@ export default function WorkflowPage() {
   const [issues, setIssues] = useState<JiraIssue[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<JiraIssue | null>(null);
+  const [imageAttachments, setImageAttachments] = useState<ImageAttachment[]>([]);
+  const [isLoadingAttachments, setIsLoadingAttachments] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [outputFiles, setOutputFiles] = useState<OutputFile[]>([]);
@@ -138,6 +150,30 @@ export default function WorkflowPage() {
     }
   };
 
+  const loadAttachments = async (issueKey: string) => {
+    if (!config) return;
+
+    setIsLoadingAttachments(true);
+    try {
+      const response = await fetch("/api/jira/attachments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ config, issueKey }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setImageAttachments(data.attachments || []);
+      }
+    } catch (error) {
+      console.error("Failed to load attachments:", error);
+    } finally {
+      setIsLoadingAttachments(false);
+    }
+  };
+
   const handleExtract = async (issue: JiraIssue) => {
     if (!config) {
       toast.error("Please configure your settings first");
@@ -147,6 +183,8 @@ export default function WorkflowPage() {
     setIsExtracting(true);
     setSelectedIssue(issue);
     setOutputFiles([]);
+    // Load attachments when issue is selected
+    await loadAttachments(issue.key);
 
     try {
       const response = await fetch("/api/workflow/extract", {
@@ -167,6 +205,8 @@ export default function WorkflowPage() {
       
       // Load output files
       await loadOutputFiles(issue.key);
+      // Reload attachments after extraction
+      await loadAttachments(issue.key);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to extract issue data"
@@ -562,6 +602,75 @@ export default function WorkflowPage() {
                   ))}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Image Attachments Section */}
+        {selectedIssue && imageAttachments.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ImageIcon className="h-5 w-5" />
+                Image Attachments
+              </CardTitle>
+              <CardDescription>
+                Images attached to issue{" "}
+                <span className="font-mono font-medium">
+                  {selectedIssue.key}
+                </span>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingAttachments ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <span>Loading attachments...</span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {imageAttachments.map((attachment) => (
+                    <div
+                      key={attachment.id}
+                      className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow"
+                    >
+                      <div className="aspect-video bg-muted flex items-center justify-center relative group">
+                        <img
+                          src={`/api/jira/attachments/${selectedIssue.key}/${encodeURIComponent(attachment.filename)}`}
+                          alt={attachment.filename}
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            // Fallback to content URL if local image fails
+                            const target = e.target as HTMLImageElement;
+                            if (!target.src.includes(attachment.contentUrl)) {
+                              target.src = attachment.contentUrl;
+                            }
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                          <a
+                            href={`/api/jira/attachments/${selectedIssue.key}/${encodeURIComponent(attachment.filename)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-white bg-black/50 px-3 py-1 rounded text-sm hover:bg-black/70"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            View Full Size
+                          </a>
+                        </div>
+                      </div>
+                      <div className="p-3 border-t">
+                        <p className="text-sm font-medium truncate" title={attachment.filename}>
+                          {attachment.filename}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {(attachment.size / 1024).toFixed(2)} KB • {attachment.mimeType}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
