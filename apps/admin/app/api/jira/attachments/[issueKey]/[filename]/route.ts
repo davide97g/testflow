@@ -1,15 +1,24 @@
 import { getEnvVars } from "@/lib/env";
 import axios from "axios";
 import { NextRequest, NextResponse } from "next/server";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { issueKey: string; filename: string } }
+  { params }: { params: Promise<{ issueKey: string; filename: string }> | { issueKey: string; filename: string } }
 ) {
   try {
-    const { issueKey, filename } = params;
+    // Handle both sync and async params (Next.js 15+ uses async params)
+    const resolvedParams = params instanceof Promise ? await params : params;
+    const { issueKey, filename } = resolvedParams;
+
+    if (!issueKey || !filename) {
+      return NextResponse.json(
+        { error: "issueKey and filename are required" },
+        { status: 400 }
+      );
+    }
 
     const envVars = await getEnvVars();
     const JIRA_EMAIL = envVars.JIRA_EMAIL;
@@ -27,11 +36,41 @@ export async function GET(
     const monorepoRoot = join(workspaceRoot, "..", "..");
     const testflowDir = join(monorepoRoot, ".testflow");
     const outputDir = join(testflowDir, "output", issueKey);
+    const attachmentsDir = join(outputDir, "attachments");
     const attachmentsMetadataPath = join(
       outputDir,
       "attachments-metadata.json"
     );
 
+    // Ensure attachments directory exists
+    mkdirSync(attachmentsDir, { recursive: true });
+
+    // Check if image is already downloaded locally
+    const localImagePath = join(attachmentsDir, filename);
+    if (existsSync(localImagePath)) {
+      const imageBuffer = readFileSync(localImagePath);
+      const ext = filename.toLowerCase().split(".").pop();
+      const contentTypeMap: Record<string, string> = {
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        gif: "image/gif",
+        webp: "image/webp",
+        svg: "image/svg+xml",
+        bmp: "image/bmp",
+        tiff: "image/tiff",
+      };
+      const contentType = contentTypeMap[ext || ""] || "image/jpeg";
+
+      return new NextResponse(imageBuffer, {
+        headers: {
+          "Content-Type": contentType,
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    }
+
+    // If not found locally, check metadata and fetch from Jira
     if (!existsSync(attachmentsMetadataPath)) {
       return NextResponse.json(
         {
@@ -68,6 +107,10 @@ export async function GET(
       responseType: "arraybuffer",
     });
 
+    // Save image locally for future access
+    const imageBuffer = Buffer.from(imageResponse.data);
+    writeFileSync(localImagePath, imageBuffer);
+
     // Determine content type from metadata or filename
     const contentType =
       attachment.mimeType ||
@@ -86,7 +129,7 @@ export async function GET(
         return contentTypeMap[ext || ""] || "image/jpeg";
       })();
 
-    return new NextResponse(Buffer.from(imageResponse.data), {
+    return new NextResponse(imageBuffer, {
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "public, max-age=3600",

@@ -28,12 +28,31 @@ const configSchema = z.object({
 const requestSchema = z.object({
   config: configSchema,
   issueKey: z.string().min(1),
+  selectedSections: z
+    .object({
+      jira: z.boolean(),
+      bitbucket: z.boolean(),
+      confluence: z.boolean(),
+      zephyr: z.boolean(),
+    })
+    .optional(),
+  includeAttachments: z.boolean().optional(),
 });
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { config, issueKey } = requestSchema.parse(body);
+    const {
+      config,
+      issueKey,
+      selectedSections = {
+        jira: true,
+        bitbucket: true,
+        confluence: true,
+        zephyr: true,
+      },
+      includeAttachments = true,
+    } = requestSchema.parse(body);
 
     // Get paths - resolve from admin app to monorepo root
     const workspaceRoot = process.cwd(); // This is apps/admin
@@ -148,6 +167,39 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Generate the prompt based on selected sections
+    const sections: string[] = [];
+
+    if (selectedSections.jira && issueDescription) {
+      sections.push(`### Jira Issue Description
+\`\`\`
+${issueDescription}
+\`\`\``);
+    }
+
+    if (selectedSections.bitbucket && prPatch) {
+      sections.push(`### PR Patch
+\`\`\`patch
+${prPatch}
+\`\`\``);
+    }
+
+    if (selectedSections.confluence && confluenceContent) {
+      sections.push(`### Confluence Pages
+${confluenceContent}`);
+    }
+
+    if (includeAttachments && imageAttachmentsSection) {
+      sections.push(imageAttachmentsSection);
+    }
+
+    const inputDataSection =
+      sections.length > 0
+        ? `## Input Data
+
+${sections.join("\n\n")}`
+        : "## Input Data\n\nNo data selected for inclusion.";
+
     // Generate the prompt
     const generatedPrompt = `# E2E Test Generation Prompt for ${issueKey}
 
@@ -155,24 +207,7 @@ ${promptTemplate}
 
 ---
 
-## Input Data
-
-### Jira Issue Description
-\`\`\`
-${issueDescription}
-\`\`\`
-
-${prPatch ? `### PR Patch
-\`\`\`patch
-${prPatch}
-\`\`\`
-` : ""}
-
-${confluenceContent ? `### Confluence Pages
-${confluenceContent}
-` : ""}
-
-${imageAttachmentsSection}
+${inputDataSection}
 
 ---
 

@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
   Check,
@@ -32,6 +33,9 @@ import {
   Code,
   Database,
   Image as ImageIcon,
+  X,
+  CheckCircle2,
+  Circle,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -94,6 +98,36 @@ export default function WorkflowPage() {
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [config, setConfig] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<FileCategory>("prompt");
+
+  // Extraction status for each section
+  type ExtractionStatus = "pending" | "loading" | "success" | "error" | "no-data" | "disabled";
+  const [extractionStatus, setExtractionStatus] = useState<{
+    jira: ExtractionStatus;
+    bitbucket: ExtractionStatus;
+    confluence: ExtractionStatus;
+    zephyr: ExtractionStatus;
+    attachments: ExtractionStatus;
+  }>({
+    jira: "pending",
+    bitbucket: "pending",
+    confluence: "pending",
+    zephyr: "pending",
+    attachments: "pending",
+  });
+
+  // Section selection for prompt generation
+  const [selectedSections, setSelectedSections] = useState<{
+    jira: boolean;
+    bitbucket: boolean;
+    confluence: boolean;
+    zephyr: boolean;
+  }>({
+    jira: true,
+    bitbucket: true,
+    confluence: true,
+    zephyr: true,
+  });
+  const [includeAttachments, setIncludeAttachments] = useState(true);
 
   useEffect(() => {
     const stored = localStorage.getItem(CONFIG_STORAGE_KEY);
@@ -183,9 +217,170 @@ export default function WorkflowPage() {
     setIsExtracting(true);
     setSelectedIssue(issue);
     setOutputFiles([]);
-    // Load attachments when issue is selected
-    await loadAttachments(issue.key);
 
+    // Reset extraction status
+    setExtractionStatus({
+      jira: "pending",
+      bitbucket: "pending",
+      confluence: "pending",
+      zephyr: "pending",
+      attachments: "pending",
+    });
+
+    // Check which sections are configured
+    const hasJira = !!config.jira?.baseUrl;
+    const hasBitbucket = !!config.bitbucket?.workspace && !!config.bitbucket?.repo;
+    const hasConfluence = !!config.confluence?.baseUrl;
+    const hasZephyr = !!config.zephyr?.projectKey;
+
+    // Set disabled state for unconfigured sections
+    if (!hasJira) setExtractionStatus((prev) => ({ ...prev, jira: "disabled" }));
+    if (!hasBitbucket) setExtractionStatus((prev) => ({ ...prev, bitbucket: "disabled" }));
+    if (!hasConfluence) setExtractionStatus((prev) => ({ ...prev, confluence: "disabled" }));
+    if (!hasZephyr) setExtractionStatus((prev) => ({ ...prev, zephyr: "disabled" }));
+
+    // Fetch all data sources asynchronously
+    const fetchPromises: Promise<void>[] = [];
+
+    // Fetch Jira data
+    if (hasJira) {
+      setExtractionStatus((prev) => ({ ...prev, jira: "loading" }));
+      fetchPromises.push(
+        fetch("/api/workflow/extract/jira", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ config, issueKey: issue.key }),
+        })
+          .then(async (res) => {
+            if (res.ok) {
+              setExtractionStatus((prev) => ({ ...prev, jira: "success" }));
+            } else {
+              setExtractionStatus((prev) => ({ ...prev, jira: "error" }));
+            }
+          })
+          .catch(() => {
+            setExtractionStatus((prev) => ({ ...prev, jira: "error" }));
+          })
+      );
+    }
+
+    // Fetch Bitbucket data
+    if (hasBitbucket) {
+      setExtractionStatus((prev) => ({ ...prev, bitbucket: "loading" }));
+      fetchPromises.push(
+        fetch("/api/workflow/extract/bitbucket", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ config, issueKey: issue.key }),
+        })
+          .then(async (res) => {
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success === false) {
+                // Authentication or other error
+                setExtractionStatus((prev) => ({ ...prev, bitbucket: "error" }));
+                if (data.error) {
+                  toast.error(`Bitbucket: ${data.error}`);
+                }
+              } else {
+                setExtractionStatus((prev) => ({
+                  ...prev,
+                  bitbucket: data.hasData ? "success" : "no-data",
+                }));
+              }
+            } else {
+              setExtractionStatus((prev) => ({ ...prev, bitbucket: "error" }));
+            }
+          })
+          .catch(() => {
+            setExtractionStatus((prev) => ({ ...prev, bitbucket: "error" }));
+          })
+      );
+    }
+
+    // Fetch Confluence data
+    if (hasConfluence) {
+      setExtractionStatus((prev) => ({ ...prev, confluence: "loading" }));
+      fetchPromises.push(
+        fetch("/api/workflow/extract/confluence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ config, issueKey: issue.key }),
+        })
+          .then(async (res) => {
+            if (res.ok) {
+              const data = await res.json();
+              setExtractionStatus((prev) => ({
+                ...prev,
+                confluence: data.hasData ? "success" : "no-data",
+              }));
+            } else {
+              setExtractionStatus((prev) => ({ ...prev, confluence: "no-data" }));
+            }
+          })
+          .catch(() => {
+            setExtractionStatus((prev) => ({ ...prev, confluence: "no-data" }));
+          })
+      );
+    }
+
+    // Fetch Zephyr data
+    if (hasZephyr) {
+      setExtractionStatus((prev) => ({ ...prev, zephyr: "loading" }));
+      fetchPromises.push(
+        fetch("/api/workflow/extract/zephyr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ config, issueKey: issue.key }),
+        })
+          .then(async (res) => {
+            if (res.ok) {
+              const data = await res.json();
+              setExtractionStatus((prev) => ({
+                ...prev,
+                zephyr: data.hasData ? "success" : "no-data",
+              }));
+            } else {
+              setExtractionStatus((prev) => ({ ...prev, zephyr: "no-data" }));
+            }
+          })
+          .catch(() => {
+            setExtractionStatus((prev) => ({ ...prev, zephyr: "no-data" }));
+          })
+      );
+    }
+
+    // Fetch attachments
+    setExtractionStatus((prev) => ({ ...prev, attachments: "loading" }));
+    fetchPromises.push(
+      (async () => {
+        try {
+          const response = await fetch("/api/jira/attachments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ config, issueKey: issue.key }),
+          });
+          if (response.ok) {
+            const data = await response.json();
+            const attachments = data.attachments || [];
+            setImageAttachments(attachments);
+            setExtractionStatus((prev) => ({
+              ...prev,
+              attachments: attachments.length > 0 ? "success" : "no-data",
+            }));
+          } else {
+            setExtractionStatus((prev) => ({ ...prev, attachments: "no-data" }));
+          }
+        } catch {
+          setExtractionStatus((prev) => ({ ...prev, attachments: "no-data" }));
+        }
+      })()
+    );
+
+    // Wait for all fetches to complete
+    await Promise.all(fetchPromises);
+
+    // Run CLI extract command to save data
     try {
       const response = await fetch("/api/workflow/extract", {
         method: "POST",
@@ -200,13 +395,8 @@ export default function WorkflowPage() {
         throw new Error(error.error || "Failed to extract issue data");
       }
 
-      const data = await response.json();
-      toast.success("Issue data extracted successfully");
-      
-      // Load output files
+      toast.success("Data extraction completed");
       await loadOutputFiles(issue.key);
-      // Reload attachments after extraction
-      await loadAttachments(issue.key);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to extract issue data"
@@ -227,6 +417,13 @@ export default function WorkflowPage() {
       return;
     }
 
+    // Check if at least one section is selected
+    const hasSelection = Object.values(selectedSections).some((v) => v);
+    if (!hasSelection) {
+      toast.error("Please select at least one section to include in the prompt");
+      return;
+    }
+
     setIsGenerating(true);
 
     try {
@@ -238,6 +435,8 @@ export default function WorkflowPage() {
         body: JSON.stringify({
           config,
           issueKey: selectedIssue.key,
+          selectedSections,
+          includeAttachments,
         }),
       });
 
@@ -675,38 +874,270 @@ export default function WorkflowPage() {
           </Card>
         )}
 
-        {/* Generate Prompt Section */}
+        {/* Step 2: Extract Data & Generate Prompt */}
         {selectedIssue && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Step 2: Generate LLM Prompt</CardTitle>
-              <CardDescription>
-                Generate a prompt for LLM to create E2E tests for{" "}
-                <span className="font-mono font-medium">
-                  {selectedIssue.key}
-                </span>
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onClick={handleGenerate}
-                disabled={isGenerating}
-                className="w-full"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Generate LLM Prompt
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="space-y-6 mb-6">
+            {/* Extraction Checklist */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Step 2: Extract Data</CardTitle>
+                <CardDescription>
+                  Fetching data from all configured sources for issue{" "}
+                  <span className="font-mono font-medium">
+                    {selectedIssue.key}
+                  </span>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Jira Section */}
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="flex-shrink-0">
+                        {extractionStatus.jira === "loading" && (
+                          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        )}
+                        {extractionStatus.jira === "success" && (
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                        )}
+                        {extractionStatus.jira === "error" && (
+                          <X className="h-5 w-5 text-red-500" />
+                        )}
+                        {extractionStatus.jira === "no-data" && (
+                          <Circle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        {extractionStatus.jira === "disabled" && (
+                          <Circle className="h-5 w-5 text-muted-foreground opacity-50" />
+                        )}
+                        {extractionStatus.jira === "pending" && (
+                          <Circle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium">Jira Issue</div>
+                        <div className="text-sm text-muted-foreground">
+                          {extractionStatus.jira === "loading" && "Fetching issue data..."}
+                          {extractionStatus.jira === "success" && "Issue data fetched successfully"}
+                          {extractionStatus.jira === "error" && "Failed to fetch issue data"}
+                          {extractionStatus.jira === "no-data" && "No data found"}
+                          {extractionStatus.jira === "disabled" && "Not configured"}
+                          {extractionStatus.jira === "pending" && "Waiting..."}
+                        </div>
+                      </div>
+                    </div>
+                    <Checkbox
+                      checked={selectedSections.jira}
+                      onCheckedChange={(checked) =>
+                        setSelectedSections((prev) => ({
+                          ...prev,
+                          jira: checked === true,
+                        }))
+                      }
+                      disabled={extractionStatus.jira === "disabled" || extractionStatus.jira === "pending"}
+                    />
+                  </div>
+
+                  {/* Bitbucket Section */}
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="flex-shrink-0">
+                        {extractionStatus.bitbucket === "loading" && (
+                          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        )}
+                        {extractionStatus.bitbucket === "success" && (
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                        )}
+                        {extractionStatus.bitbucket === "no-data" && (
+                          <Circle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        {extractionStatus.bitbucket === "disabled" && (
+                          <Circle className="h-5 w-5 text-muted-foreground opacity-50" />
+                        )}
+                        {extractionStatus.bitbucket === "pending" && (
+                          <Circle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium">Bitbucket (Branch/PR)</div>
+                        <div className="text-sm text-muted-foreground">
+                          {extractionStatus.bitbucket === "loading" && "Searching for branch/PR..."}
+                          {extractionStatus.bitbucket === "success" && "Branch/PR found"}
+                          {extractionStatus.bitbucket === "no-data" && "No branch or PR found"}
+                          {extractionStatus.bitbucket === "disabled" && "Not configured"}
+                          {extractionStatus.bitbucket === "pending" && "Waiting..."}
+                        </div>
+                      </div>
+                    </div>
+                    <Checkbox
+                      checked={selectedSections.bitbucket}
+                      onCheckedChange={(checked) =>
+                        setSelectedSections((prev) => ({
+                          ...prev,
+                          bitbucket: checked === true,
+                        }))
+                      }
+                      disabled={extractionStatus.bitbucket === "disabled" || extractionStatus.bitbucket === "pending"}
+                    />
+                  </div>
+
+                  {/* Confluence Section */}
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="flex-shrink-0">
+                        {extractionStatus.confluence === "loading" && (
+                          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        )}
+                        {extractionStatus.confluence === "success" && (
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                        )}
+                        {extractionStatus.confluence === "no-data" && (
+                          <Circle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        {extractionStatus.confluence === "disabled" && (
+                          <Circle className="h-5 w-5 text-muted-foreground opacity-50" />
+                        )}
+                        {extractionStatus.confluence === "pending" && (
+                          <Circle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium">Confluence Pages</div>
+                        <div className="text-sm text-muted-foreground">
+                          {extractionStatus.confluence === "loading" && "Fetching linked pages..."}
+                          {extractionStatus.confluence === "success" && "Pages found"}
+                          {extractionStatus.confluence === "no-data" && "No linked pages found"}
+                          {extractionStatus.confluence === "disabled" && "Not configured"}
+                          {extractionStatus.confluence === "pending" && "Waiting..."}
+                        </div>
+                      </div>
+                    </div>
+                    <Checkbox
+                      checked={selectedSections.confluence}
+                      onCheckedChange={(checked) =>
+                        setSelectedSections((prev) => ({
+                          ...prev,
+                          confluence: checked === true,
+                        }))
+                      }
+                      disabled={extractionStatus.confluence === "disabled" || extractionStatus.confluence === "pending"}
+                    />
+                  </div>
+
+                  {/* Zephyr Section */}
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="flex-shrink-0">
+                        {extractionStatus.zephyr === "loading" && (
+                          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        )}
+                        {extractionStatus.zephyr === "success" && (
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                        )}
+                        {extractionStatus.zephyr === "no-data" && (
+                          <Circle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        {extractionStatus.zephyr === "disabled" && (
+                          <Circle className="h-5 w-5 text-muted-foreground opacity-50" />
+                        )}
+                        {extractionStatus.zephyr === "pending" && (
+                          <Circle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium">Zephyr Test Cases</div>
+                        <div className="text-sm text-muted-foreground">
+                          {extractionStatus.zephyr === "loading" && "Fetching test cases..."}
+                          {extractionStatus.zephyr === "success" && "Test cases found"}
+                          {extractionStatus.zephyr === "no-data" && "No test cases found"}
+                          {extractionStatus.zephyr === "disabled" && "Not configured"}
+                          {extractionStatus.zephyr === "pending" && "Waiting..."}
+                        </div>
+                      </div>
+                    </div>
+                    <Checkbox
+                      checked={selectedSections.zephyr}
+                      onCheckedChange={(checked) =>
+                        setSelectedSections((prev) => ({
+                          ...prev,
+                          zephyr: checked === true,
+                        }))
+                      }
+                      disabled={extractionStatus.zephyr === "disabled" || extractionStatus.zephyr === "pending"}
+                    />
+                  </div>
+
+                  {/* Attachments Section */}
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="flex-shrink-0">
+                        {extractionStatus.attachments === "loading" && (
+                          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        )}
+                        {extractionStatus.attachments === "success" && (
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                        )}
+                        {extractionStatus.attachments === "no-data" && (
+                          <Circle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        {extractionStatus.attachments === "pending" && (
+                          <Circle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium">Image Attachments</div>
+                        <div className="text-sm text-muted-foreground">
+                          {extractionStatus.attachments === "loading" && "Fetching attachments..."}
+                          {extractionStatus.attachments === "success" &&
+                            `${imageAttachments.length} image(s) found`}
+                          {extractionStatus.attachments === "no-data" && "No images found"}
+                          {extractionStatus.attachments === "pending" && "Waiting..."}
+                        </div>
+                      </div>
+                    </div>
+                    <Checkbox
+                      checked={includeAttachments}
+                      onCheckedChange={(checked) =>
+                        setIncludeAttachments(checked === true)
+                      }
+                      disabled={
+                        extractionStatus.attachments === "pending" ||
+                        extractionStatus.attachments === "no-data"
+                      }
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Generate Prompt Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Step 3: Generate LLM Prompt</CardTitle>
+                <CardDescription>
+                  Generate a prompt using the selected data sources
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  onClick={handleGenerate}
+                  disabled={isGenerating || isExtracting}
+                  className="w-full"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      Generate LLM Prompt
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Output Files Section */}
@@ -735,7 +1166,7 @@ export default function WorkflowPage() {
           return (
             <Card>
               <CardHeader>
-                <CardTitle>Step 3: Output Files</CardTitle>
+                <CardTitle>Step 4: Output Files</CardTitle>
                 <CardDescription>
                   View, copy, or download the generated files organized by category
                 </CardDescription>
