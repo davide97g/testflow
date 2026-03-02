@@ -421,6 +421,11 @@ export default function ConfigPage() {
                                 <span className="text-xs text-yellow-600 dark:text-yellow-500 truncate" title={testResult.jira.error}>
                                   {testResult.jira.error}
                                 </span>
+                                {testResult.jira.error?.includes("Environment Variables") && (
+                                  <Link href="/env" className="shrink-0 text-xs text-primary underline">
+                                    Configure
+                                  </Link>
+                                )}
                               </>
                             ) : (
                               <>
@@ -456,6 +461,11 @@ export default function ConfigPage() {
                               <span className="text-xs text-yellow-600 dark:text-yellow-500 truncate" title={testResult.bitbucket.error}>
                                 {testResult.bitbucket.error}
                               </span>
+                              {testResult.bitbucket.error?.includes("Environment Variables") && (
+                                <Link href="/env" className="shrink-0 text-xs text-primary underline">
+                                  Configure
+                                </Link>
+                              )}
                             </>
                           )}
                         </div>
@@ -479,6 +489,11 @@ export default function ConfigPage() {
                               <span className="text-xs text-yellow-600 dark:text-yellow-500 truncate" title={testResult.confluence.error}>
                                 {testResult.confluence.error}
                               </span>
+                              {testResult.confluence.error?.includes("Environment Variables") && (
+                                <Link href="/env" className="shrink-0 text-xs text-primary underline">
+                                  Configure
+                                </Link>
+                              )}
                             </>
                           )}
                         </div>
@@ -502,6 +517,11 @@ export default function ConfigPage() {
                               <span className="text-xs text-yellow-600 dark:text-yellow-500 truncate" title={testResult.zephyr.error}>
                                 {testResult.zephyr.error}
                               </span>
+                              {testResult.zephyr.error?.includes("Environment Variables") && (
+                                <Link href="/env" className="shrink-0 text-xs text-primary underline">
+                                  Configure
+                                </Link>
+                              )}
                             </>
                           )}
                         </div>

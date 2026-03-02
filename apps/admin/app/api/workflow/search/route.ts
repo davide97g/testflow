@@ -24,10 +24,23 @@ const configSchema = z.object({
     .optional(),
 });
 
+const filterOverridesSchema = z
+  .object({
+    useAssignee: z.boolean().optional(),
+    assignee: z.string().nullable().optional(),
+    useStatuses: z.boolean().optional(),
+    statuses: z.array(z.string()).optional(),
+    useLabels: z.boolean().optional(),
+    labels: z.array(z.string()).optional(),
+  })
+  .optional();
+
 const requestSchema = z.object({
   config: configSchema,
   query: z.string().optional().default(""),
   maxResults: z.number().min(1).max(200).optional().default(50),
+  startAt: z.number().min(0).optional().default(0),
+  filterOverrides: filterOverridesSchema,
 });
 
 interface CompactIssue {
@@ -44,10 +57,15 @@ interface CompactIssue {
   }>;
 }
 
+function escapeJqlString(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { config, query, maxResults } = requestSchema.parse(body);
+    const { config, query, maxResults, startAt, filterOverrides } =
+      requestSchema.parse(body);
 
     const envVars = await getEnvVars();
     const JIRA_EMAIL = envVars.JIRA_EMAIL;
@@ -76,12 +94,27 @@ export async function POST(request: NextRequest) {
     let normalizedBaseUrl = config.jira.baseUrl.trim().replace(/\/+$/, "");
     normalizedBaseUrl = normalizedBaseUrl.replace(/\/rest\/api\/[23]$/, "");
 
-    const statuses = config.jira.statuses || [
+    const defaultStatuses = [
       "To Do",
       "In Progress",
       "Pull Requested",
       "Dev Release",
     ];
+    const useAssignee =
+      filterOverrides?.useAssignee ?? Boolean(config.jira.assignee);
+    const assigneeValue =
+      filterOverrides?.assignee !== undefined && filterOverrides.assignee !== null
+        ? filterOverrides.assignee
+        : config.jira.assignee ?? null;
+    const useStatuses = filterOverrides?.useStatuses ?? true;
+    const statuses =
+      useStatuses && filterOverrides?.statuses?.length
+        ? filterOverrides.statuses
+        : config.jira.statuses?.length
+          ? config.jira.statuses
+          : defaultStatuses;
+    const useLabels = filterOverrides?.useLabels ?? false;
+    const labels = filterOverrides?.labels ?? [];
 
     // Resolve board filter ID when boardId is set (scope search to board)
     let boardFilterId: string | null = null;
@@ -106,24 +139,32 @@ export async function POST(request: NextRequest) {
         // Board or agile API not available; fall back to status/assignee only
       }
     }
-    if (config.jira.assignee) {
-      filterDescriptionParts.push(`assignee: ${config.jira.assignee}`);
+    if (useAssignee && assigneeValue) {
+      filterDescriptionParts.push(`assignee: ${assigneeValue}`);
     }
-    filterDescriptionParts.push(
-      `statuses: ${statuses.map((s) => s).join(", ")}`
-    );
+    if (useStatuses && statuses.length) {
+      filterDescriptionParts.push(`statuses: ${statuses.join(", ")}`);
+    }
+    if (useLabels && labels.length) {
+      filterDescriptionParts.push(`labels: ${labels.join(", ")}`);
+    }
 
-    // Base JQL: board filter (if any) + assignee + statuses
+    // Base JQL: board filter (if any) + assignee + statuses + labels
     const baseJqlParts: string[] = [];
     if (boardFilterId) {
       baseJqlParts.push(`filter = ${boardFilterId}`);
     }
-    baseJqlParts.push(
-      `status IN (${statuses.map((s) => `"${s.replace(/"/g, '\\"')}"`).join(", ")})`
-    );
-    if (config.jira.assignee) {
+    if (useStatuses && statuses.length) {
       baseJqlParts.push(
-        `assignee = "${String(config.jira.assignee).replace(/"/g, '\\"')}"`
+        `status IN (${statuses.map((s) => `"${escapeJqlString(s)}"`).join(", ")})`
+      );
+    }
+    if (useAssignee && assigneeValue) {
+      baseJqlParts.push(`assignee = "${escapeJqlString(assigneeValue)}"`);
+    }
+    if (useLabels && labels.length) {
+      baseJqlParts.push(
+        `labels IN (${labels.map((l) => `"${escapeJqlString(l)}"`).join(", ")})`
       );
     }
 
@@ -153,7 +194,7 @@ export async function POST(request: NextRequest) {
     // Fetch issues from Jira (search runs on Jira, not on pre-downloaded list)
     const searchUrl = `${normalizedBaseUrl}/rest/api/3/search/jql?jql=${encodeURIComponent(
       jql
-    )}&startAt=0&maxResults=${Math.min(maxResults, 200)}&fields=key,summary,status`;
+    )}&startAt=${startAt}&maxResults=${Math.min(maxResults, 200)}&fields=key,summary,status`;
 
     const response = await axios.get(searchUrl, { headers });
     const data = response.data as {
@@ -164,12 +205,14 @@ export async function POST(request: NextRequest) {
           status?: { name?: string };
         };
       }>;
+      total?: number;
     };
 
     if (!data.issues || data.issues.length === 0) {
       return NextResponse.json({
         issues: [],
         filterDescription,
+        total: data.total ?? 0,
       });
     }
 
@@ -326,7 +369,11 @@ export async function POST(request: NextRequest) {
       issues.push(issueData);
     }
 
-    return NextResponse.json({ issues, filterDescription });
+    return NextResponse.json({
+      issues,
+      filterDescription,
+      total: data.total ?? issues.length,
+    });
   } catch (error) {
     console.error("Error searching Jira issues:", error);
     if (axios.isAxiosError(error)) {

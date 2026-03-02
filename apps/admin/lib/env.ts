@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { getCentralEnvPath, getTestflowDir } from "@/lib/testflow-path";
 
-// In-memory store (same as in API route)
 const envStore = new Map<string, Record<string, string>>();
 
 export const getSessionId = async (): Promise<string | null> => {
@@ -10,17 +10,29 @@ export const getSessionId = async (): Promise<string | null> => {
   return cookieStore.get("testflow_session_id")?.value || null;
 };
 
+/**
+ * Central source of truth for environment variables.
+ * Reads from .testflow/env.json at monorepo root so that config test, Zephyr, Jira, etc. all see the same data saved from the Env page.
+ */
 export const getEnvVars = async (): Promise<Record<string, string>> => {
+  const centralPath = getCentralEnvPath();
+  if (existsSync(centralPath)) {
+    try {
+      const content = readFileSync(centralPath, "utf-8");
+      const parsed = JSON.parse(content) as Record<string, string>;
+      return parsed ?? {};
+    } catch {
+      return {};
+    }
+  }
+
   const sessionId = await getSessionId();
   if (!sessionId) return {};
 
-  // Try memory first
   let envVars = envStore.get(sessionId);
-
-  // Try file system
   if (!envVars) {
-    const testflowDir = join(process.cwd(), ".testflow", "admin");
-    const envFilePath = join(testflowDir, `${sessionId}.env.json`);
+    const adminDir = join(getTestflowDir(), "admin");
+    const envFilePath = join(adminDir, `${sessionId}.env.json`);
     if (existsSync(envFilePath)) {
       try {
         const fileContent = readFileSync(envFilePath, "utf-8");
@@ -33,6 +45,5 @@ export const getEnvVars = async (): Promise<Record<string, string>> => {
     }
   }
 
-  return envVars || {};
+  return envVars ?? {};
 };
-

@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { getCentralEnvPath, getTestflowDir } from "@/lib/testflow-path";
 
 // In-memory store for env vars (keyed by session ID)
 const envStore = new Map<string, Record<string, string>>();
@@ -15,27 +17,24 @@ const getSessionId = (request: NextRequest): string => {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, string>;
     const sessionId = getSessionId(request);
 
-    // Store in memory
     envStore.set(sessionId, body);
 
-    // Also store in file system for persistence
-    const testflowDir = join(process.cwd(), ".testflow", "admin");
+    const testflowDir = getTestflowDir();
     mkdirSync(testflowDir, { recursive: true });
-    const envFilePath = join(testflowDir, `${sessionId}.env.json`);
-    writeFileSync(envFilePath, JSON.stringify(body, null, 2), "utf-8");
+    const centralPath = getCentralEnvPath();
+    writeFileSync(centralPath, JSON.stringify(body, null, 2), "utf-8");
 
     const response = NextResponse.json({ success: true });
-    
-    // Set cookie if not exists
+
     if (!request.cookies.get("testflow_session_id")) {
       response.cookies.set("testflow_session_id", sessionId, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7, // 7 days
+        maxAge: 60 * 60 * 24 * 7,
       });
     }
 
@@ -51,28 +50,34 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const sessionId = getSessionId(request);
+    const centralPath = getCentralEnvPath();
+    if (existsSync(centralPath)) {
+      const content = readFileSync(centralPath, "utf-8");
+      const parsed = JSON.parse(content) as Record<string, string>;
+      return NextResponse.json(parsed ?? {});
+    }
 
-    // Try to load from memory first
+    const sessionId = getSessionId(request);
     let envVars = envStore.get(sessionId);
 
-    // If not in memory, try to load from file
     if (!envVars) {
-      const testflowDir = join(process.cwd(), ".testflow", "admin");
-      const envFilePath = join(testflowDir, `${sessionId}.env.json`);
+      const adminDir = join(getTestflowDir(), "admin");
+      const envFilePath = join(adminDir, `${sessionId}.env.json`);
       if (existsSync(envFilePath)) {
         try {
           const fileContent = readFileSync(envFilePath, "utf-8");
           const parsed = JSON.parse(fileContent) as Record<string, string>;
           envVars = parsed;
           envStore.set(sessionId, parsed);
+          mkdirSync(getTestflowDir(), { recursive: true });
+          writeFileSync(centralPath, JSON.stringify(parsed, null, 2), "utf-8");
         } catch {
-          // File exists but couldn't be parsed, ignore
+          // ignore
         }
       }
     }
 
-    return NextResponse.json(envVars || {});
+    return NextResponse.json(envVars ?? {});
   } catch (error) {
     console.error("Error loading env vars:", error);
     return NextResponse.json(

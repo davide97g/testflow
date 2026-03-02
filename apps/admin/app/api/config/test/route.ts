@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
               : "Request failed";
       }
     } else {
-      result.jira.error = "JIRA_EMAIL and JIRA_API_TOKEN are required";
+      result.jira.error = "JIRA_EMAIL and JIRA_API_TOKEN are required. Set them in Environment Variables (/env).";
     }
 
     // Test Bitbucket
@@ -107,7 +107,8 @@ export async function POST(request: NextRequest) {
         }
       } else {
         result.bitbucket.success = false;
-        result.bitbucket.error = "BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required";
+        result.bitbucket.error =
+          "BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required. Set them in Environment Variables (/env).";
       }
     }
 
@@ -140,7 +141,7 @@ export async function POST(request: NextRequest) {
         }
       } else {
         result.confluence.success = false;
-        result.confluence.error = "CONFLUENCE_EMAIL and CONFLUENCE_API_TOKEN are required";
+        result.confluence.error = "CONFLUENCE_EMAIL and CONFLUENCE_API_TOKEN are required. Set them in Environment Variables (/env).";
       }
     }
 
@@ -171,7 +172,8 @@ export async function POST(request: NextRequest) {
         }
       } else {
         result.zephyr.success = false;
-        result.zephyr.error = "ZEPHYR_BASE_URL and ZEPHYR_ACCESS_TOKEN are required";
+        result.zephyr.error =
+          "ZEPHYR_BASE_URL and ZEPHYR_ACCESS_TOKEN are required. Set them in Environment Variables (/env).";
       }
     }
 

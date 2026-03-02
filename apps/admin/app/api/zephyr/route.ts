@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "ZEPHYR_BASE_URL and ZEPHYR_ACCESS_TOKEN are required",
+            "ZEPHYR_BASE_URL and ZEPHYR_ACCESS_TOKEN are required. Set them in Environment Variables (/env) and save.",
         },
         { status: 400 }
       );

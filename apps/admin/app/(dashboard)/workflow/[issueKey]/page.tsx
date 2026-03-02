@@ -16,7 +16,16 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { getTokenEstimateSummary, optimizePromptForTokens, type PromptOptimizationResult } from "@/lib/token-count";
 import {
   Check,
   Copy,
@@ -34,6 +43,7 @@ import {
   Circle,
   AlertTriangle,
   Settings,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -107,6 +117,8 @@ export default function WorkflowIssuePage() {
     bitbucket?: { tokenExpired?: boolean };
     confluence?: { tokenExpired?: boolean };
   }>({});
+  const [optimizeDialogOpen, setOptimizeDialogOpen] = useState(false);
+  const [optimizedPromptResult, setOptimizedPromptResult] = useState<PromptOptimizationResult | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem(CONFIG_STORAGE_KEY);
@@ -697,14 +709,31 @@ export default function WorkflowIssuePage() {
               </Button>
               {hasPrompt && categorized && (
                 <div className="mt-6 pt-6 border-t">
-                  <div className="mb-4 flex items-center justify-between">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-5 w-5 text-primary" />
                       <h3 className="text-lg font-semibold">LLM Prompt (Ready to Copy)</h3>
+                      <span className="text-sm text-muted-foreground" title="Approximate token count for GPT-style models">
+                        ~{getTokenEstimateSummary(categorized.prompt[0]?.content ?? "").tokens.toLocaleString()} tokens
+                      </span>
                     </div>
-                    <Button size="sm" onClick={() => { const f = categorized.prompt[0]; if (f) handleCopy(f.content, f.path); }}>
-                      {copiedPath === categorized.prompt[0]?.path ? <><Check className="mr-2 h-3 w-3" />Copied</> : <><Copy className="mr-2 h-3 w-3" />Copy Prompt</>}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const content = categorized.prompt[0]?.content ?? "";
+                          setOptimizedPromptResult(optimizePromptForTokens(content));
+                          setOptimizeDialogOpen(true);
+                        }}
+                        aria-label="Optimize prompt for fewer tokens"
+                      >
+                        <Zap className="mr-2 h-3 w-3" />Optimize
+                      </Button>
+                      <Button size="sm" onClick={() => { const f = categorized.prompt[0]; if (f) handleCopy(f.content, f.path); }}>
+                        {copiedPath === categorized.prompt[0]?.path ? <><Check className="mr-2 h-3 w-3" />Copied</> : <><Copy className="mr-2 h-3 w-3" />Copy Prompt</>}
+                      </Button>
+                    </div>
                   </div>
                   {categorized.prompt.map((file) => <div key={file.path} className="mb-4">{renderFileCard(file)}</div>)}
                 </div>
@@ -712,6 +741,42 @@ export default function WorkflowIssuePage() {
             </CardContent>
           </Card>
         </div>
+
+        {optimizedPromptResult && (
+          <Dialog open={optimizeDialogOpen} onOpenChange={setOptimizeDialogOpen}>
+            <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle>Optimized prompt (fewer tokens)</DialogTitle>
+                <DialogDescription>
+                  Original: ~{optimizedPromptResult.originalTokens.toLocaleString()} tokens → Optimized: ~{optimizedPromptResult.optimizedTokens.toLocaleString()} tokens
+                  {optimizedPromptResult.suggestions.length > 0 && (
+                    <ul className="mt-2 list-disc list-inside text-left">
+                      {optimizedPromptResult.suggestions.map((s, i) => (
+                        <li key={`suggestion-${i}-${s.slice(0, 20)}`}>{s}</li>
+                      ))}
+                    </ul>
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="rounded-md bg-muted p-3 flex-1 min-h-0 overflow-hidden flex flex-col">
+                <pre className="text-sm overflow-auto flex-1 max-h-96"><code>{optimizedPromptResult.optimizedText}</code></pre>
+              </div>
+              <DialogFooter>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (optimizedPromptResult) {
+                      handleCopy(optimizedPromptResult.optimizedText, "llm-prompt-optimized.md");
+                      setOptimizeDialogOpen(false);
+                    }
+                  }}
+                >
+                  <Copy className="mr-2 h-3 w-3" />Copy optimized prompt
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
 
         {categorized && availableTabs.length > 0 && (
           <Card className="mb-6">

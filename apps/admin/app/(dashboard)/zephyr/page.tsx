@@ -44,6 +44,7 @@ export default function ZephyrPage() {
   const [testCases, setTestCases] = useState<ZephyrTestCase[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [config, setConfig] = useState<any>(null);
+  const [envError, setEnvError] = useState<string | null>(null);
 
   useEffect(() => {
     // Load config from localStorage
@@ -64,6 +65,7 @@ export default function ZephyrPage() {
       return;
     }
 
+    setEnvError(null);
     setIsLoading(true);
     try {
       const response = await fetch("/api/zephyr", {
@@ -74,12 +76,18 @@ export default function ZephyrPage() {
         body: JSON.stringify({ config }),
       });
 
+      const data = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to fetch test cases");
+        const message = (data as { error?: string } | undefined)?.error ?? "Failed to fetch test cases";
+        if (typeof message === "string" && message.includes("Environment Variables")) {
+          setEnvError(message);
+          toast.error("Set Zephyr credentials in Environment Variables");
+          return;
+        }
+        throw new Error(message);
       }
 
-      const data = await response.json();
       setTestCases(data.testCases || []);
       toast.success(`Fetched ${data.testCases?.length || 0} test cases`);
     } catch (error) {
@@ -165,11 +173,23 @@ export default function ZephyrPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {isLoading && testCases.length === 0 ? (
+            {envError ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4">
+                <p className="text-sm text-amber-800 dark:text-amber-200 mb-3">
+                  {envError}
+                </p>
+                <Link href="/env">
+                  <Button variant="outline" size="sm">
+                    Go to Environment Variables
+                  </Button>
+                </Link>
+              </div>
+            ) : null}
+            {isLoading && testCases.length === 0 && !envError ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : testCases.length === 0 ? (
+            ) : testCases.length === 0 && !envError ? (
               <div className="py-12 text-center text-muted-foreground">
                 No test cases found
               </div>
