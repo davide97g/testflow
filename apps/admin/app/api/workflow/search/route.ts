@@ -26,7 +26,8 @@ const configSchema = z.object({
 
 const requestSchema = z.object({
   config: configSchema,
-  query: z.string().min(1),
+  query: z.string().optional().default(""),
+  maxResults: z.number().min(1).max(200).optional().default(50),
 });
 
 interface CompactIssue {
@@ -46,7 +47,7 @@ interface CompactIssue {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { config, query } = requestSchema.parse(body);
+    const { config, query, maxResults } = requestSchema.parse(body);
 
     const envVars = await getEnvVars();
     const JIRA_EMAIL = envVars.JIRA_EMAIL;
@@ -75,30 +76,84 @@ export async function POST(request: NextRequest) {
     let normalizedBaseUrl = config.jira.baseUrl.trim().replace(/\/+$/, "");
     normalizedBaseUrl = normalizedBaseUrl.replace(/\/rest\/api\/[23]$/, "");
 
-    // Normalize query: accept full Jira URL or issue key
-    const extractedKeyFromUrl = query.match(
+    const statuses = config.jira.statuses || [
+      "To Do",
+      "In Progress",
+      "Pull Requested",
+      "Dev Release",
+    ];
+
+    // Resolve board filter ID when boardId is set (scope search to board)
+    let boardFilterId: string | null = null;
+    const filterDescriptionParts: string[] = [];
+    const rawBoardId = config.jira.boardId;
+    const boardId =
+      typeof rawBoardId === "number"
+        ? rawBoardId
+        : typeof rawBoardId === "string" && /^\d+$/.test(rawBoardId)
+          ? parseInt(rawBoardId, 10)
+          : null;
+    if (boardId != null) {
+      try {
+        const agileUrl = `${normalizedBaseUrl}/rest/agile/1.0/board/${boardId}`;
+        const boardRes = await axios.get(agileUrl, { headers });
+        const boardData = boardRes.data as { filter?: { id?: string } };
+        if (boardData.filter?.id) {
+          boardFilterId = String(boardData.filter.id);
+          filterDescriptionParts.push(`Board ${boardId}`);
+        }
+      } catch {
+        // Board or agile API not available; fall back to status/assignee only
+      }
+    }
+    if (config.jira.assignee) {
+      filterDescriptionParts.push(`assignee: ${config.jira.assignee}`);
+    }
+    filterDescriptionParts.push(
+      `statuses: ${statuses.map((s) => s).join(", ")}`
+    );
+
+    // Base JQL: board filter (if any) + assignee + statuses
+    const baseJqlParts: string[] = [];
+    if (boardFilterId) {
+      baseJqlParts.push(`filter = ${boardFilterId}`);
+    }
+    baseJqlParts.push(
+      `status IN (${statuses.map((s) => `"${s.replace(/"/g, '\\"')}"`).join(", ")})`
+    );
+    if (config.jira.assignee) {
+      baseJqlParts.push(
+        `assignee = "${String(config.jira.assignee).replace(/"/g, '\\"')}"`
+      );
+    }
+
+    const trimmedQuery = (query ?? "").trim();
+    const extractedKeyFromUrl = trimmedQuery.match(
       /(?:browse|issues)\/([A-Z][A-Z0-9]*-\d+)/i
     )?.[1];
     const normalizedQuery = extractedKeyFromUrl
       ? extractedKeyFromUrl.toUpperCase()
-      : query.trim();
+      : trimmedQuery;
 
-    // Build JQL query - search by key or text
-    let jql: string;
-    if (/^[A-Z][A-Z0-9]*-\d+$/i.test(normalizedQuery)) {
-      // Exact key match (from key or extracted from URL)
-      jql = `key = "${normalizedQuery.toUpperCase()}"`;
-    } else {
-      // Text search
-      jql = `text ~ "${normalizedQuery.replace(/"/g, '\\"')}" ORDER BY updated DESC`;
+    if (normalizedQuery) {
+      if (/^[A-Z][A-Z0-9]*-\d+$/i.test(normalizedQuery)) {
+        baseJqlParts.push(`key = "${normalizedQuery.toUpperCase()}"`);
+      } else {
+        baseJqlParts.push(
+          `text ~ "${normalizedQuery.replace(/"/g, '\\"')}"`
+        );
+      }
     }
+    const jql =
+      baseJqlParts.join(" AND ") + " ORDER BY updated DESC";
 
     const issues: CompactIssue[] = [];
+    const filterDescription = filterDescriptionParts.join(" • ");
 
-    // Fetch issues
+    // Fetch issues from Jira (search runs on Jira, not on pre-downloaded list)
     const searchUrl = `${normalizedBaseUrl}/rest/api/3/search/jql?jql=${encodeURIComponent(
       jql
-    )}&startAt=0&maxResults=20&fields=key,summary,status`;
+    )}&startAt=0&maxResults=${Math.min(maxResults, 200)}&fields=key,summary,status`;
 
     const response = await axios.get(searchUrl, { headers });
     const data = response.data as {
@@ -112,7 +167,10 @@ export async function POST(request: NextRequest) {
     };
 
     if (!data.issues || data.issues.length === 0) {
-      return NextResponse.json({ issues: [] });
+      return NextResponse.json({
+        issues: [],
+        filterDescription,
+      });
     }
 
     // Process issues
@@ -212,14 +270,6 @@ export async function POST(request: NextRequest) {
       // Fetch Confluence pages if configured
       if (config.confluence && CONFLUENCE_EMAIL && CONFLUENCE_API_TOKEN) {
         try {
-          const confAuth = Buffer.from(
-            `${CONFLUENCE_EMAIL}:${CONFLUENCE_API_TOKEN}`
-          ).toString("base64");
-          const confHeaders = {
-            Authorization: `Basic ${confAuth}`,
-            Accept: "application/json",
-          };
-
           // Get remote links from Jira
           const remoteLinksUrl = `${normalizedBaseUrl}/rest/api/3/issue/${key}/remotelink`;
           const remoteLinksResponse = await axios.get(remoteLinksUrl, {
@@ -276,7 +326,7 @@ export async function POST(request: NextRequest) {
       issues.push(issueData);
     }
 
-    return NextResponse.json({ issues });
+    return NextResponse.json({ issues, filterDescription });
   } catch (error) {
     console.error("Error searching Jira issues:", error);
     if (axios.isAxiosError(error)) {
