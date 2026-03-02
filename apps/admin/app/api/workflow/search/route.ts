@@ -1,6 +1,7 @@
 import { getEnvVars } from "@/lib/env";
 import axios from "axios";
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const configSchema = z.object({
@@ -74,14 +75,22 @@ export async function POST(request: NextRequest) {
     let normalizedBaseUrl = config.jira.baseUrl.trim().replace(/\/+$/, "");
     normalizedBaseUrl = normalizedBaseUrl.replace(/\/rest\/api\/[23]$/, "");
 
+    // Normalize query: accept full Jira URL or issue key
+    const extractedKeyFromUrl = query.match(
+      /(?:browse|issues)\/([A-Z][A-Z0-9]*-\d+)/i
+    )?.[1];
+    const normalizedQuery = extractedKeyFromUrl
+      ? extractedKeyFromUrl.toUpperCase()
+      : query.trim();
+
     // Build JQL query - search by key or text
     let jql: string;
-    if (/^[A-Z]+-\d+$/i.test(query.trim())) {
-      // Exact key match
-      jql = `key = "${query.trim().toUpperCase()}"`;
+    if (/^[A-Z][A-Z0-9]*-\d+$/i.test(normalizedQuery)) {
+      // Exact key match (from key or extracted from URL)
+      jql = `key = "${normalizedQuery.toUpperCase()}"`;
     } else {
       // Text search
-      jql = `text ~ "${query.trim()}" ORDER BY updated DESC`;
+      jql = `text ~ "${normalizedQuery.replace(/"/g, '\\"')}" ORDER BY updated DESC`;
     }
 
     const issues: CompactIssue[] = [];

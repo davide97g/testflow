@@ -145,12 +145,15 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching Bitbucket data:", error);
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+    const tokenExpired = status === 401 || status === 403;
     return NextResponse.json(
       {
-        success: true,
+        success: false,
         data: {},
         hasData: false,
         error: error instanceof Error ? error.message : "Unknown error",
+        tokenExpired,
       },
       { status: 200 }
     );

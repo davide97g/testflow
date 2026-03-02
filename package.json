@@ -11,9 +11,12 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "format": "turbo run format",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.0",
     "turbo": "^2.3.3"
   },
   "packageManager": "bun@1.0.0",

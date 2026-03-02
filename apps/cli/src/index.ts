@@ -110,4 +110,26 @@ program
     runNodeScript("./src/scripts/get-zephyr-testcases.ts", args);
   });
 
+const getMonorepoRoot = (): string => {
+  return path.join(__dirname, "..", "..", "..");
+};
+
+program
+  .command("e2e")
+  .description("Run Playwright E2E tests from the monorepo root")
+  .action(() => {
+    const monorepoRoot = getMonorepoRoot();
+    const result = spawnSync("bun", ["run", "e2e"], {
+      stdio: "inherit",
+      cwd: monorepoRoot,
+    });
+    if (result.error) {
+      console.error(`Error running e2e: ${result.error.message}`);
+      process.exit(1);
+    }
+    if (result.status !== null && result.status !== 0) {
+      process.exit(result.status);
+    }
+  });
+
 program.parse(process.argv);

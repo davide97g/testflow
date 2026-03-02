@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Upload, FileText, Save, Eye, EyeOff } from "lucide-react";
-import { useCallback, useState } from "react";
+import { Plus, Trash2, Upload, Save, Eye, EyeOff } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -20,7 +20,33 @@ export default function EnvPage() {
     { id: "1", key: "", value: "" },
   ]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingEnv, setIsLoadingEnv] = useState(true);
   const [visibleValues, setVisibleValues] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const loadEnv = async () => {
+      try {
+        const response = await fetch("/api/env");
+        if (!response.ok) return;
+        const data = (await response.json()) as Record<string, string>;
+        const entries = Object.entries(data);
+        if (entries.length > 0) {
+          setEnvVars(
+            entries.map(([key, value], index) => ({
+              id: `loaded-${index}-${key}`,
+              key,
+              value: value ?? "",
+            }))
+          );
+        }
+      } catch {
+        // Ignore load errors
+      } finally {
+        setIsLoadingEnv(false);
+      }
+    };
+    loadEnv();
+  }, []);
 
   const handleAddRow = () => {
     setEnvVars([
@@ -131,7 +157,7 @@ export default function EnvPage() {
         } else {
           toast.error("No valid environment variables found in file");
         }
-      } catch (error) {
+      } catch {
         toast.error("Failed to read file");
       }
     };
@@ -177,7 +203,7 @@ export default function EnvPage() {
       }
 
       toast.success("Environment variables saved successfully");
-    } catch (error) {
+    } catch {
       toast.error("Failed to save environment variables");
     } finally {
       setIsSaving(false);
@@ -236,6 +262,12 @@ export default function EnvPage() {
                 <div className="w-10"></div>
               </div>
 
+              {isLoadingEnv ? (
+                <div className="py-8 text-center text-muted-foreground text-sm">
+                  Loading environment variables...
+                </div>
+              ) : (
+              <>
               {envVars.map((envVar) => (
                 <div
                   key={envVar.id}
@@ -288,6 +320,8 @@ export default function EnvPage() {
                   </Button>
                 </div>
               ))}
+              </>
+              )}
             </div>
 
             <Button
